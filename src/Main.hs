@@ -39,17 +39,17 @@ loadSurfaceBMP screenSurface path = do
   SDL.convertSurface loadedSurface desiredFormat <* SDL.freeSurface loadedSurface
 
 data GameState = GameState
-  { ball :: Ball
+  { getBall :: Ball
   -- , posA :: Point V2 CInt-- ^ (x, y) coordinates of paddle A
   -- , posB :: Point V2 CInt -- ^ (x, y) coordinates of paddle B
   }
 
 data Ball = Ball
   {
-    getBallPos :: Point V2 CInt -- ^ (x, y) coordinates of ball
-  , getBallVelocity :: Int      -- ^ Velocity, in pixels/tick.
-  , getBallHeading :: Float     -- ^ Degree of direction, where 0 is to the right, clockwise.
-  , getBallSpinVelocity :: Int  -- ^ Amount of velocity pushing perpendicular of heading, in pixels/tick.
+    getBallPos :: (Float, Float) -- ^ (x, y) coordinates of ball
+  , getBallVelocity :: Float      -- ^ Velocity, in pixels/tick.
+  , getBallHeading :: Float     -- ^ Degree of direction, where 0 is to the right, counter-clockwise.
+  , getBallSpinVelocity :: Float  -- ^ Amount of velocity pushing perpendicular of heading, in pixels/tick.
   }
 
 posUp1 :: Point V2 CInt -> Point V2 CInt
@@ -58,11 +58,36 @@ posUp1 (P (V2 x y)) = (P (V2 x (y - 10)))
 posDown1 :: Point V2 CInt -> Point V2 CInt
 posDown1 (P (V2 x y)) = (P (V2 x (y + 10)))
 
+up1 :: (Float, Float) -> (Float, Float)
+up1 (x, y) = (x, y - 1)
+
+down1 :: (Float, Float) -> (Float, Float)
+down1 (x, y) = (x, y + 1)
+
 ballUp1 :: Ball -> Ball
-ballUp1 ball = ball { getBallPos = posUp1 (getBallPos ball) }
+ballUp1 ball = ball { getBallPos = up1 (getBallPos ball) }
 
 ballDown1 :: Ball -> Ball
-ballDown1 ball = ball { getBallPos = posDown1 (getBallPos ball) }
+ballDown1 ball = ball { getBallPos = down1 (getBallPos ball) }
+
+ballUpdate :: Ball -> Ball
+ballUpdate ball =
+  let (x, y) = getBallPos ball
+      v = getBallVelocity ball
+      a = getBallHeading ball
+      s = getBallSpinVelocity ball
+      x' = x + (v * sin (toRadian a))
+      y' = y + (v * cos (toRadian a))
+      a' = a + s
+  in ball { getBallPos = (x', y')
+          , getBallHeading = a'
+          }
+
+toRadian :: Float -> Float
+toRadian a = 2 * pi * a
+
+toPV2 :: (Float, Float) -> Point V2 CInt
+toPV2 (x, y) = P $ V2 (round x) (round y)
 
 main :: IO ()
 main = do
@@ -83,8 +108,14 @@ main = do
 
   let
     startingGameState = GameState {
-                  ball = Ball {
-                    getBallPos = P $ V2 100 100
+                  getBall = Ball {
+                    getBallPos = (100, 100)
+                  , getBallVelocity = 0.2
+                  , getBallHeading = 0.2
+
+                  -- This is not a good model for a curve-ball or spinning
+                  -- ball. Just creates a perfect circle. Need some kind of polynomial shape.
+                  , getBallSpinVelocity = 0.0001
                   }
                 }
     loop oldGameState oldSurface = do
@@ -98,17 +129,18 @@ main = do
                       case eventPayload of
                           SDL.KeyboardEvent e | SDL.keyboardEventKeyMotion e == SDL.Pressed ->
                             case SDL.keysymKeycode (SDL.keyboardEventKeysym e) of
-                                 SDL.KeycodeUp    -> Last (Just (oldGameState { ball = ballUp1 (ball oldGameState) }))
-                                 SDL.KeycodeDown  -> Last (Just (oldGameState { ball = ballDown1 (ball oldGameState) }))
+                                 SDL.KeycodeUp    -> Last (Just (oldGameState { getBall = ballUp1 (getBall oldGameState) }))
+                                 SDL.KeycodeDown  -> Last (Just (oldGameState { getBall = ballDown1 (getBall oldGameState) }))
                                  _  -> Last (Nothing)
                           _ -> Last Nothing)
                     events
+      let gameState'' = gameState' { getBall = ballUpdate (getBall gameState') }
 
-      SDL.surfaceBlit surfaceBackground Nothing screenSurface Nothing
-      SDL.surfaceBlit surfaceBall Nothing screenSurface (Just (getBallPos (ball gameState')))
+      -- SDL.surfaceBlit surfaceBackground Nothing screenSurface Nothing
+      SDL.surfaceBlit surfaceBall Nothing screenSurface (Just (toPV2 (getBallPos (getBall gameState''))))
       SDL.updateWindowSurface window
 
-      unless quit (loop gameState' screenSurface)
+      unless quit (loop gameState'' screenSurface)
 
   -- Start the main loop.
   loop startingGameState surfaceBackground

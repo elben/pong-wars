@@ -11,4 +11,6 @@ stack build
 # See: https://github.com/DanielG/ghc-mod/wiki#most-common-stack-related-issue
 stack install ghc-mod
 stack exec vim
+
+stack build && stack exec pong-wars
 ```
