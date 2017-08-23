@@ -43,13 +43,16 @@ loadSurface screenSurface path = do
 
 data GameState = GameState
   { getBall :: Ball
-  -- , posA :: Point V2 CInt-- ^ (x, y) coordinates of paddle A
+  , getPaddleA :: Paddle
   -- , posB :: Point V2 CInt -- ^ (x, y) coordinates of paddle B
   }
 
+data Paddle = Paddle
+  { getPaddlePos :: (Float, Float) -- ^ (x, y) coordinates of paddle
+  }
+
 data Ball = Ball
-  {
-    getBallPos :: (Float, Float) -- ^ (x, y) coordinates of ball
+  { getBallPos :: (Float, Float) -- ^ (x, y) coordinates of ball
   , getBallVelocity :: Float      -- ^ Velocity, in pixels/tick.
   , getBallHeading :: Float     -- ^ Degree of direction, where 0 is to the right, counter-clockwise.
   , getBallSpinVelocity :: Float  -- ^ Amount of velocity pushing perpendicular of heading, in pixels/tick.
@@ -62,16 +65,16 @@ posDown1 :: Point V2 CInt -> Point V2 CInt
 posDown1 (P (V2 x y)) = (P (V2 x (y + 10)))
 
 up1 :: (Float, Float) -> (Float, Float)
-up1 (x, y) = (x, y - 1)
+up1 (x, y) = (x, y - 10)
 
 down1 :: (Float, Float) -> (Float, Float)
-down1 (x, y) = (x, y + 1)
+down1 (x, y) = (x, y + 10)
 
-ballUp1 :: Ball -> Ball
-ballUp1 ball = ball { getBallPos = up1 (getBallPos ball) }
+paddleUp1 :: Paddle -> Paddle
+paddleUp1 p = p { getPaddlePos = up1 (getPaddlePos p) }
 
-ballDown1 :: Ball -> Ball
-ballDown1 ball = ball { getBallPos = down1 (getBallPos ball) }
+paddleDown1 :: Paddle -> Paddle
+paddleDown1 p = p { getPaddlePos = down1 (getPaddlePos p) }
 
 updateBall :: Ball -> Ball
 updateBall ball =
@@ -106,6 +109,9 @@ toPV2 (x, y) = P $ V2 (round x) (round y)
 toRectBall :: (Float, Float) -> Rectangle CInt
 toRectBall (x, y) = Rectangle (toPV2 (x, y)) (V2 20 20)
 
+toRectPaddle :: (Float, Float) -> Rectangle CInt
+toRectPaddle (x, y) = Rectangle (toPV2 (x, y)) (V2 20 80)
+
 main :: IO ()
 main = do
   SDL.initialize [SDL.InitVideo]
@@ -124,7 +130,6 @@ main = do
   renderer <- SDL.createRenderer window (-1)
                 SDL.RendererConfig
                   { SDL.rendererType = SDL.AcceleratedRenderer
-                    -- ^ The renderer is a software fallback
                   , SDL.rendererTargetTexture = False
                   }
 
@@ -139,22 +144,28 @@ main = do
   mapM_ SDL.freeSurface [ surfaceBackground, surfaceBall, surfacePaddle ]
 
   let
-    startingGameState = GameState {
-                  getBall = Ball {
-                    getBallPos = (100, 100)
-                  , getBallVelocity = 0.5
+    startingGameState =
+      GameState
+        { getBall =
+            Ball
+            { getBallPos = (100, 100)
+            , getBallVelocity = 0.5
 
-                  -- Heading, number from 0 to 1. 0 should be the vector
-                  -- pointing to the right, 0.25 points down (clockwise, because
-                  -- y increases downwards), and 0.5 the vector pointing to the
-                  -- left.
-                  , getBallHeading = 0.2
+            -- Heading, number from 0 to 1. 0 should be the vector
+            -- pointing to the right, 0.25 points down (clockwise, because
+            -- y increases downwards), and 0.5 the vector pointing to the
+            -- left.
+            , getBallHeading = 0.2
 
-                  -- This is not a good model for a curve-ball or spinning
-                  -- ball. Just creates a perfect circle. Need some kind of polynomial shape.
-                  , getBallSpinVelocity = 0.0001
-                  }
-                }
+            -- This is not a good model for a curve-ball or spinning
+            -- ball. Just creates a perfect circle. Need some kind of polynomial shape.
+            , getBallSpinVelocity = 0.0001
+            }
+        , getPaddleA =
+            Paddle
+            { getPaddlePos = (20, 300)
+            }
+       }
     loop oldGameState = do
       events <- map SDL.eventPayload <$> SDL.pollEvents
       let quit = SDL.QuitEvent `elem` events
@@ -166,8 +177,8 @@ main = do
                       case eventPayload of
                           SDL.KeyboardEvent e | SDL.keyboardEventKeyMotion e == SDL.Pressed ->
                             case SDL.keysymKeycode (SDL.keyboardEventKeysym e) of
-                                 SDL.KeycodeUp    -> Last (Just (oldGameState { getBall = ballUp1 (getBall oldGameState) }))
-                                 SDL.KeycodeDown  -> Last (Just (oldGameState { getBall = ballDown1 (getBall oldGameState) }))
+                                 SDL.KeycodeUp    -> Last (Just (oldGameState { getPaddleA = paddleUp1 (getPaddleA oldGameState) }))
+                                 SDL.KeycodeDown  -> Last (Just (oldGameState { getPaddleA = paddleDown1 (getPaddleA oldGameState) }))
                                  _  -> Last Nothing
                           _ -> Last Nothing)
                     events
@@ -179,6 +190,7 @@ main = do
       -- Draw stuff into buffer
       SDL.copy renderer textureBackground Nothing Nothing
       SDL.copy renderer textureBall Nothing (Just (toRectBall (getBallPos (getBall gameState''))))
+      SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddlePos (getPaddleA gameState''))))
 
       -- Flip the buffer and render!
       SDL.present renderer
