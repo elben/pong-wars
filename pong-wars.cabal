@@ -22,6 +22,7 @@ executable pong-wars
   build-depends:       base >= 4.7 && < 5
                      , sdl2
                      , sdl2-image
+                     , sdl2-ttf
   ghc-options:      -threaded
                     -Wall
                     -fno-warn-unused-binds

@@ -3,7 +3,7 @@
 # Development
 
 ```
-brew install sdl2 sdl2_image pkg-config
+brew install sdl2 sdl2_image sdl2_ttf pkg-config
 
 stack build
 
@@ -14,3 +14,9 @@ stack exec vim
 
 stack build && stack exec pong-wars
 ```
+
+# Resources
+
+http://lazyfoo.net/tutorials/SDL/index.php
+http://www.metanetsoftware.com/technique/tutorialA.html
+http://www.metanetsoftware.com/technique/tutorialB.html

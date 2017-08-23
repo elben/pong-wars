@@ -10,31 +10,34 @@ import Data.Monoid
 import Foreign.C.Types
 import Prelude hiding (any, mapM_)
 import SDL.Vect
+import SDL.Video.Renderer
 import qualified SDL
+import qualified SDL.TTF
 import qualified SDL.Image
 
 import Paths_pong_wars (getDataFileName)
 
+maxWidth = 800
+maxHeight = 600
+
 screenWidth, screenHeight :: CInt
-(screenWidth, screenHeight) = (640, 480)
+(screenWidth, screenHeight) = (800, 600)
+
+-- https://hackage.haskell.org/package/sdl2-ttf-1.0.0/src/examples/font_test.hs
+-- red :: SDL.Font.Color
+-- red = SDL.V4 255 0 0 0
 
 loadImage :: FilePath -> IO SDL.Surface
 loadImage fp = getDataFileName fp >>= SDL.Image.load
 
-loadBMP :: FilePath -> IO SDL.Surface
-loadBMP path = getDataFileName path >>= SDL.loadBMP
+loadBMPSurface :: FilePath -> IO SDL.Surface
+loadBMPSurface path = getDataFileName path >>= SDL.loadBMP
 
 -- | Load image as Surface on the given Surface. Optimized by converting new
 -- Surface to the given Surface.
 loadSurface :: SDL.Surface -> FilePath -> IO SDL.Surface
 loadSurface screenSurface path = do
   loadedSurface <- loadImage path
-  desiredFormat <- SDL.surfaceFormat screenSurface
-  SDL.convertSurface loadedSurface desiredFormat <* SDL.freeSurface loadedSurface
-
-loadSurfaceBMP :: SDL.Surface -> FilePath -> IO SDL.Surface
-loadSurfaceBMP screenSurface path = do
-  loadedSurface <- loadBMP path
   desiredFormat <- SDL.surfaceFormat screenSurface
   SDL.convertSurface loadedSurface desiredFormat <* SDL.freeSurface loadedSurface
 
@@ -70,18 +73,29 @@ ballUp1 ball = ball { getBallPos = up1 (getBallPos ball) }
 ballDown1 :: Ball -> Ball
 ballDown1 ball = ball { getBallPos = down1 (getBallPos ball) }
 
-ballUpdate :: Ball -> Ball
-ballUpdate ball =
+updateBall :: Ball -> Ball
+updateBall ball =
   let (x, y) = getBallPos ball
       v = getBallVelocity ball
       a = getBallHeading ball
-      s = getBallSpinVelocity ball
-      x' = x + (v * sin (toRadian a))
-      y' = y + (v * cos (toRadian a))
-      a' = a + s
+      x' = x + (v * cos (toRadian a))
+      y' = y + (v * sin (toRadian a))
+
+      -- Check for wall bounces
+      a' = if x' <= 0 || x' >= maxWidth
+             then 0.5 - a
+             else a
+      a'' = if y' <= 0
+             then 1 - a'
+             else if y' >= maxHeight
+                  then -a'
+                  else a'
   in ball { getBallPos = (x', y')
-          , getBallHeading = a'
+          , getBallHeading = snd (properFraction a'')
           }
+
+normalizeAngle :: Float -> Float
+normalizeAngle a = snd (properFraction a)
 
 toRadian :: Float -> Float
 toRadian a = 2 * pi * a
@@ -89,28 +103,51 @@ toRadian a = 2 * pi * a
 toPV2 :: (Float, Float) -> Point V2 CInt
 toPV2 (x, y) = P $ V2 (round x) (round y)
 
+toRectBall :: (Float, Float) -> Rectangle CInt
+toRectBall (x, y) = Rectangle (toPV2 (x, y)) (V2 20 20)
+
 main :: IO ()
 main = do
   SDL.initialize [SDL.InitVideo]
-  window <- SDL.createWindow "SDL Tutorial" SDL.defaultWindow { SDL.windowInitialSize = V2 screenWidth screenHeight }
+
+  -- Hint to SDL that we prefer to scale using linear filtering. Warn if not
+  -- available.
+  SDL.HintRenderScaleQuality SDL.$= SDL.ScaleLinear
+  do renderQuality <- SDL.get SDL.HintRenderScaleQuality
+     when (renderQuality /= SDL.ScaleLinear) $
+       putStrLn "Warning: Linear texture filtering not enabled!"
+
+  window <- SDL.createWindow "SDL Tutorial"
+    SDL.defaultWindow { SDL.windowInitialSize = V2 screenWidth screenHeight }
   SDL.showWindow window
-  screenSurface <- SDL.getWindowSurface window
 
-  surfaceBackground <- loadSurface screenSurface "resources/images/background.png"
-  surfaceBall <- loadSurface screenSurface "resources/images/ball.png"
-  surfacePaddle <- loadSurface screenSurface "resources/images/paddle.png"
+  renderer <- SDL.createRenderer window (-1)
+                SDL.RendererConfig
+                  { SDL.rendererType = SDL.AcceleratedRenderer
+                    -- ^ The renderer is a software fallback
+                  , SDL.rendererTargetTexture = False
+                  }
 
-  surfaceDefault <- loadSurfaceBMP screenSurface "resources/images/press.bmp"
-  surfaceUp <- loadSurfaceBMP screenSurface "resources/images/up.bmp"
-  surfaceDown <- loadSurfaceBMP screenSurface "resources/images/down.bmp"
-  surfaceLeft <- loadSurfaceBMP screenSurface "resources/images/left.bmp"
-  surfaceRight <- loadSurfaceBMP screenSurface "resources/images/right.bmp"
+  surfaceBackground <- loadBMPSurface "resources/images/background.bmp"
+  surfaceBall <- loadBMPSurface "resources/images/ball.bmp"
+  surfacePaddle <- loadBMPSurface "resources/images/paddle.bmp"
+
+  textureBackground <- SDL.createTextureFromSurface renderer surfaceBackground
+  textureBall <- SDL.createTextureFromSurface renderer surfaceBall
+  texturePaddle <- SDL.createTextureFromSurface renderer surfacePaddle
+
+  mapM_ SDL.freeSurface [ surfaceBackground, surfaceBall, surfacePaddle ]
 
   let
     startingGameState = GameState {
                   getBall = Ball {
                     getBallPos = (100, 100)
-                  , getBallVelocity = 0.2
+                  , getBallVelocity = 0.5
+
+                  -- Heading, number from 0 to 1. 0 should be the vector
+                  -- pointing to the right, 0.25 points down (clockwise, because
+                  -- y increases downwards), and 0.5 the vector pointing to the
+                  -- left.
                   , getBallHeading = 0.2
 
                   -- This is not a good model for a curve-ball or spinning
@@ -118,7 +155,7 @@ main = do
                   , getBallSpinVelocity = 0.0001
                   }
                 }
-    loop oldGameState oldSurface = do
+    loop oldGameState = do
       events <- map SDL.eventPayload <$> SDL.pollEvents
       let quit = SDL.QuitEvent `elem` events
 
@@ -131,39 +168,26 @@ main = do
                             case SDL.keysymKeycode (SDL.keyboardEventKeysym e) of
                                  SDL.KeycodeUp    -> Last (Just (oldGameState { getBall = ballUp1 (getBall oldGameState) }))
                                  SDL.KeycodeDown  -> Last (Just (oldGameState { getBall = ballDown1 (getBall oldGameState) }))
-                                 _  -> Last (Nothing)
+                                 _  -> Last Nothing
                           _ -> Last Nothing)
                     events
-      let gameState'' = gameState' { getBall = ballUpdate (getBall gameState') }
+      let gameState'' = gameState' { getBall = updateBall (getBall gameState') }
 
-      -- SDL.surfaceBlit surfaceBackground Nothing screenSurface Nothing
-      SDL.surfaceBlit surfaceBall Nothing screenSurface (Just (toPV2 (getBallPos (getBall gameState''))))
-      SDL.updateWindowSurface window
+      -- Initialize the backbuffer
+      SDL.clear renderer
 
-      unless quit (loop gameState'' screenSurface)
+      -- Draw stuff into buffer
+      SDL.copy renderer textureBackground Nothing Nothing
+      SDL.copy renderer textureBall Nothing (Just (toRectBall (getBallPos (getBall gameState''))))
+
+      -- Flip the buffer and render!
+      SDL.present renderer
+
+      unless quit (loop gameState'')
 
   -- Start the main loop.
-  loop startingGameState surfaceBackground
+  loop startingGameState
 
-  mapM_ SDL.freeSurface [ surfaceBackground, surfaceDefault, surfaceUp, surfaceDown, surfaceRight, surfaceLeft ]
   SDL.destroyWindow window
   SDL.quit
 
-
-main2 :: IO ()
-main2 = do
-  SDL.initialize [SDL.InitVideo]
-  window <- SDL.createWindow "SDL Tutorial" SDL.defaultWindow { SDL.windowInitialSize = V2 screenWidth screenHeight }
-  SDL.showWindow window
-  screenSurface <- SDL.getWindowSurface window
-
-  helloWorld <- loadImage "resources/images/background.png"
-
-  SDL.surfaceBlit helloWorld Nothing screenSurface Nothing
-  SDL.updateWindowSurface window
-
-  threadDelay 2000000
-
-  SDL.destroyWindow window
-  SDL.freeSurface helloWorld
-  SDL.quit
