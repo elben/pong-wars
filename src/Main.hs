@@ -49,12 +49,17 @@ data GameState = GameState
   -- , posB :: Point V2 CInt -- ^ (x, y) coordinates of paddle B
   }
 
+-- A Paddle state consist of its position, which represents the center of the
+-- paddle, and the half-width/height dimensions.
 data Paddle = Paddle
   { getPaddlePos :: (Float, Float) -- ^ (x, y) coordinates of paddle
+  , getPaddleHalfWidth :: Float
+  , getPaddleHalfHeight :: Float
   }
 
 data Ball = Ball
-  { getBallPos :: (Float, Float) -- ^ (x, y) coordinates of ball
+  { getBallPos :: (Float, Float) -- ^ (x, y) coordinates of center of ball
+  , getBallRadius :: Float      -- ^ Radius, in pixels
   , getBallVelocity :: Float      -- ^ Velocity, in pixels/tick.
   , getBallHeading :: Float     -- ^ Degree of direction, where 0 is to the right, counter-clockwise.
   , getBallSpinVelocity :: Float  -- ^ Amount of velocity pushing perpendicular of heading, in pixels/tick.
@@ -108,11 +113,20 @@ toRadian a = 2 * pi * a
 toPV2 :: (Float, Float) -> Point V2 CInt
 toPV2 (x, y) = P $ V2 (round x) (round y)
 
-toRectBall :: (Float, Float) -> Rectangle CInt
-toRectBall (x, y) = Rectangle (toPV2 (x, y)) (V2 20 20)
+toRectBall :: Ball -> Rectangle CInt
+toRectBall b =
+  let (x, y) = getBallPos b
+      r = getBallRadius b
+  in Rectangle (toPV2 (x - r, y - r)) (V2 20 20)
 
-toRectPaddle :: (Float, Float) -> Rectangle CInt
-toRectPaddle (x, y) = Rectangle (toPV2 (x, y)) (V2 20 80)
+toRectPaddle :: Paddle -> Rectangle CInt
+toRectPaddle p =
+  let (x, y) = getPaddlePos p
+      (halfW) = getPaddleHalfWidth p
+      (halfH) = getPaddleHalfHeight p
+  -- A rectangle's position is defined by the top-left corner. To find that,
+  -- take the position and move it by its half-widths/heights.
+  in Rectangle (toPV2 (x - halfW, y - halfH)) (V2 20 80)
 
 main :: IO ()
 main = do
@@ -151,6 +165,7 @@ main = do
         { getBall =
             Ball
             { getBallPos = (100, 100)
+            , getBallRadius = 10
             , getBallVelocity = 0.5
 
             -- Heading, number from 0 to 1. 0 should be the vector
@@ -166,10 +181,14 @@ main = do
         , getPaddle1 =
             Paddle
             { getPaddlePos = (20, 300)
+            , getPaddleHalfWidth = 10
+            , getPaddleHalfHeight = 40
             }
         , getPaddle2 =
             Paddle
             { getPaddlePos = (780, 300)
+            , getPaddleHalfWidth = 10
+            , getPaddleHalfHeight = 40
             }
        }
     loop oldGameState = do
@@ -197,9 +216,9 @@ main = do
 
       -- Draw stuff into buffer
       SDL.copy renderer textureBackground Nothing Nothing
-      SDL.copy renderer textureBall Nothing (Just (toRectBall (getBallPos (getBall gameState''))))
-      SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddlePos (getPaddle1 gameState''))))
-      SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddlePos (getPaddle2 gameState''))))
+      SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall gameState'')))
+      SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 gameState'')))
+      SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 gameState'')))
 
       -- Flip the buffer and render!
       SDL.present renderer
