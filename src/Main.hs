@@ -15,6 +15,7 @@ import SDL.Video.Renderer
 import qualified SDL
 import qualified SDL.TTF
 import qualified SDL.Image
+import PongWars.Collision
 
 import Paths_pong_wars (getDataFileName)
 
@@ -64,6 +65,12 @@ data Ball = Ball
   , getBallHeading :: Float     -- ^ Degree of direction, where 0 is to the right, counter-clockwise.
   , getBallSpinVelocity :: Float  -- ^ Amount of velocity pushing perpendicular of heading, in pixels/tick.
   }
+
+paddleToObject :: Paddle -> Object
+paddleToObject p = AABB (getPaddlePos p) (getPaddleHalfWidth p) (getPaddleHalfHeight p)
+
+ballToObject :: Ball -> Object
+ballToObject b = AABB (getBallPos b) (getBallRadius b) (getBallRadius b)
 
 posUp1 :: Point V2 CInt -> Point V2 CInt
 posUp1 (P (V2 x y)) = (P (V2 x (y - 10)))
@@ -210,6 +217,18 @@ main = do
 
       -- Update ball position.
       let gameState'' = gameState' { getBall = updateBall (getBall gameState') }
+
+      -- Check for paddle-ball collisions.
+      let collisionReport = checkCollision (paddleToObject (getPaddle1 gameState'')) (ballToObject (getBall gameState''))
+      let gameState''' =
+            case collisionReport of
+              NotCollided -> gameState''
+              Collided a v ->
+                 let ball = (getBall gameState'')
+                     r = getBallRadius ball
+                     ball' = ball { getBallRadius = -a }
+                     -- ^ This is wrong, but to just test
+                 in gameState'' { getBall = ball' }
 
       -- Initialize the backbuffer
       SDL.clear renderer

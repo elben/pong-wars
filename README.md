@@ -13,6 +13,8 @@ stack install ghc-mod
 stack exec vim
 
 stack build && stack exec pong-wars
+
+stack test
 ```
 
 # Resources
