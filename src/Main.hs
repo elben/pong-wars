@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE MultiWayIf #-}
 
 module Main (main) where
 
@@ -43,7 +44,8 @@ loadSurface screenSurface path = do
 
 data GameState = GameState
   { getBall :: Ball
-  , getPaddleA :: Paddle
+  , getPaddle1 :: Paddle
+  , getPaddle2 :: Paddle
   -- , posB :: Point V2 CInt -- ^ (x, y) coordinates of paddle B
   }
 
@@ -65,10 +67,10 @@ posDown1 :: Point V2 CInt -> Point V2 CInt
 posDown1 (P (V2 x y)) = (P (V2 x (y + 10)))
 
 up1 :: (Float, Float) -> (Float, Float)
-up1 (x, y) = (x, y - 10)
+up1 (x, y) = (x, y - 1)
 
 down1 :: (Float, Float) -> (Float, Float)
-down1 (x, y) = (x, y + 10)
+down1 (x, y) = (x, y + 1)
 
 paddleUp1 :: Paddle -> Paddle
 paddleUp1 p = p { getPaddlePos = up1 (getPaddlePos p) }
@@ -161,27 +163,33 @@ main = do
             -- ball. Just creates a perfect circle. Need some kind of polynomial shape.
             , getBallSpinVelocity = 0.0001
             }
-        , getPaddleA =
+        , getPaddle1 =
             Paddle
             { getPaddlePos = (20, 300)
             }
+        , getPaddle2 =
+            Paddle
+            { getPaddlePos = (780, 300)
+            }
        }
     loop oldGameState = do
+      -- Get all buffered keyboard events
       events <- map SDL.eventPayload <$> SDL.pollEvents
       let quit = SDL.QuitEvent `elem` events
 
-      -- Possibly modify game state, or use the last one.
+      -- A map of keys that are currently pressed down.
+      keyMap <- SDL.getKeyboardState
+
+      -- Possibly modify game state, or use the last one. Check if a key is
+      -- pressed down, and do the state modification.
       let gameState' =
-            fromMaybe oldGameState $ getLast $
-            foldMap (\eventPayload ->
-                      case eventPayload of
-                          SDL.KeyboardEvent e | SDL.keyboardEventKeyMotion e == SDL.Pressed ->
-                            case SDL.keysymKeycode (SDL.keyboardEventKeysym e) of
-                                 SDL.KeycodeUp    -> Last (Just (oldGameState { getPaddleA = paddleUp1 (getPaddleA oldGameState) }))
-                                 SDL.KeycodeDown  -> Last (Just (oldGameState { getPaddleA = paddleDown1 (getPaddleA oldGameState) }))
-                                 _  -> Last Nothing
-                          _ -> Last Nothing)
-                    events
+            if | keyMap SDL.ScancodeUp   -> oldGameState { getPaddle2 = paddleUp1 (getPaddle2 oldGameState) }
+               | keyMap SDL.ScancodeDown -> oldGameState { getPaddle2 = paddleDown1 (getPaddle2 oldGameState) }
+               | keyMap SDL.ScancodeW    -> oldGameState { getPaddle1 = paddleUp1 (getPaddle1 oldGameState) }
+               | keyMap SDL.ScancodeS    -> oldGameState { getPaddle1 = paddleDown1 (getPaddle1 oldGameState) }
+               | otherwise -> oldGameState
+
+      -- Update ball position.
       let gameState'' = gameState' { getBall = updateBall (getBall gameState') }
 
       -- Initialize the backbuffer
@@ -190,7 +198,8 @@ main = do
       -- Draw stuff into buffer
       SDL.copy renderer textureBackground Nothing Nothing
       SDL.copy renderer textureBall Nothing (Just (toRectBall (getBallPos (getBall gameState''))))
-      SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddlePos (getPaddleA gameState''))))
+      SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddlePos (getPaddle1 gameState''))))
+      SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddlePos (getPaddle2 gameState''))))
 
       -- Flip the buffer and render!
       SDL.present renderer
