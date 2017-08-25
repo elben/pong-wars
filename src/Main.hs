@@ -68,10 +68,10 @@ data Ball = Ball
   }
 
 paddleToObject :: Paddle -> Object
-paddleToObject p = AABB (getPaddlePos p) (getPaddleHalfWidth p) (getPaddleHalfHeight p)
+paddleToObject p = AABB Wall (getPaddlePos p) (getPaddleHalfWidth p) (getPaddleHalfHeight p)
 
 ballToObject :: Ball -> Object
-ballToObject b = AABB (getBallPos b) (getBallRadius b) (getBallRadius b)
+ballToObject b = AABB Movable (getBallPos b) (getBallRadius b) (getBallRadius b)
 
 posUp1 :: Point V2 CInt -> Point V2 CInt
 posUp1 (P (V2 x y)) = (P (V2 x (y - 10)))
@@ -203,7 +203,7 @@ main = do
             -- pointing to the right, 0.25 points down (clockwise, because
             -- y increases downwards), and 0.5 the vector pointing to the
             -- left.
-            , getBallHeading = 0.2
+            , getBallHeading = 0.15
 
             -- This is not a good model for a curve-ball or spinning
             -- ball. Just creates a perfect circle. Need some kind of polynomial shape.
@@ -252,16 +252,17 @@ main = do
       let gameState4 =
             case paddle2Collision of
               NotCollided -> gameState3
-              Collided a v ->
+              Collided a d ->
+                 -- Update the ball's position to get it out of collision (we
+                 -- don't want to trigger another collision the next check).
+                 -- Also modify the ball's heading.
                  let ball = getBall gameState3
                      (x, y) = getBallPos ball
                      heading = if a == 0 || a == 0.5 then bounceXAxis (getBallHeading ball) else bounceYAxis (getBallHeading ball)
-                     -- TODO we need I think to _move_ the ball. Otherwise, we
-                     -- will continually get "collided" and weird behavior shows
-                     -- up.
                      ball' = ball { getBallHeading = heading
-                                  , getBallPos = (x + (v * cos a), y + (v * sin a))
-                                  -- ^ TODO Fix
+                                  , getBallPos = (x + (d * cos (toRadian a)), y + (d * sin (toRadian a)))
+                                  -- ^ Project ball out of collision. Use ceiling so that we don't round down
+                                  -- into another collision at the next check.
                                   }
                  in gameState3 { getBall = ball' }
 
