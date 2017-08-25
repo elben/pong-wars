@@ -22,11 +22,11 @@ testCheckCollision =
     -- +-----+  | 2 |
     --          +---+
     testCase "1 to the left of 2 with y-axis collision" $
-    checkCollision (AABB (10, 10) 5 10) (AABB (17, 17) 5 5) @?= NotCollided
+    checkCollision (AABB (0, 0) 5 10) (AABB (20, 0) 5 5) @?= NotCollided
 
     -- Same as above, but flip 1 and 2 labels
   , testCase "1 to the right of 2 with y-axis collision" $
-    checkCollision (AABB (17, 17) 5 5) (AABB (10, 10) 10 20)  @?= NotCollided
+    checkCollision (AABB (20, 0) 5 5) (AABB (0, 0) 5 10)  @?= NotCollided
 
     -- +-----+
     -- |     |
@@ -42,4 +42,16 @@ testCheckCollision =
   -- Same as above, but flip 1 and 2 labels
   , testCase "2 above 1 with x-axis collision" $
     checkCollision (AABB (10, 50) 5 5) (AABB (10, 10) 5 10) @?= NotCollided
+
+    -- +-----+
+    -- |     |
+    -- |  1  |
+    -- |    +---+
+    -- +----| 2 |
+    --      +---+
+    -- 1 collides with 2 from the left, with the x-axis being the one that has
+    -- the smallest amount of overlap (compared to y-axis), thus that becomes
+    -- the projection vector.
+  , testCase "1 collides with 2 from the left" $
+    checkCollision (AABB (0, 0) 5 10) (AABB (5, 10) 1 5) @?= Collided 0.5 1
   ]

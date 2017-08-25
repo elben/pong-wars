@@ -10,24 +10,29 @@ data Object =
 
 data Report
   = NotCollided
-  | Collided Float -- Projection vector angle of collision
+  | Collided Float -- Projection vector angle of collision points _into_ the
+                   -- collision.
              Float -- Projection vector length
   deriving (Eq, Show)
 
+-- TODO fix projection angles. See the tutorial. Basically, i think it matters
+-- WHICH object is considered the reference object?
 checkCollision :: Object -> Object -> Report
 checkCollision (AABB (x1, y1) hw1 hh1) (AABB (x2, y2) hw2 hh2) =
   let xAxisCollided =
-        if | (x1 + hw1) >= (x2 - hw2) -> Collided 0.5 ((x1 + hw1) - (x2 - hw2))
-           -- ^ 1 collided with 2 from the left. Projection angle points left.
-           -- Projection vector value is the amount of collision.
-           | (x1 - hw1) >= (x2 + hw2) -> Collided 0.0 ((x1 - hw1) - (x2 + hw2))
-           -- ^ 1 collided with 2 from the right. Projection angle points right.
+        if | x1 <= x2 && (x1 + hw1) >= (x2 - hw2) -> Collided 0.5 ((x1 + hw1) - (x2 - hw2))
+           -- ^ Object 1 is left of 2, and 1 collided with 2 from the left.
+           -- Projection angle points left.  Projection vector value is the
+           -- amount of collision.
+           | x1 >= x2 && (x1 - hw1) <= (x2 + hw2) -> Collided 0.0 ((x2 + hw2) - (x1 - hw1))
+           -- ^ Object 1 is right of 2, and 1 collided with 2 from the right.
+           -- Projection angle points right.
            | otherwise -> NotCollided
       yAxisCollided =
-        if | (y1 + hh1) >= (y2 - hh2) -> Collided 0.25 ((y1 + hh1) - (y2 - hh2))
-           -- ^ 1 collided with 2 from the bottom. Projection angle points up.
-           | (y1 - hw1) >= (y2 + hh2) -> Collided 0.75 ((y1 - hw1) - (y2 + hh2))
-           -- ^ 1 collided with 2 from the top. Projection angle points down.
+        if | y1 <= y2 && (y1 + hh1) >= (y2 - hh2) -> Collided 0.25 ((y1 + hh1) - (y2 - hh2))
+           -- ^ 1 collided with 2 from the top. Projection angle points up.
+           | y1 >= y2 && (y1 - hh1) <= (y2 + hh2) -> Collided 0.75 ((y2 + hh2) - (y1 - hh1))
+           -- ^ 1 collided with 2 from the bottom. Projection angle points down.
            | otherwise -> NotCollided
   in
     if allAxisCollided [xAxisCollided, yAxisCollided]

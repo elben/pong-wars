@@ -13,8 +13,9 @@ import Prelude hiding (any, mapM_)
 import SDL.Vect
 import SDL.Video.Renderer
 import qualified SDL
-import qualified SDL.TTF
 import qualified SDL.Image
+import qualified SDL.TTF
+
 import PongWars.Collision
 
 import Paths_pong_wars (getDataFileName)
@@ -84,11 +85,23 @@ up1 (x, y) = (x, y - 1)
 down1 :: (Float, Float) -> (Float, Float)
 down1 (x, y) = (x, y + 1)
 
+right1 :: (Float, Float) -> (Float, Float)
+right1 (x, y) = (x + 1, y)
+
+left1 :: (Float, Float) -> (Float, Float)
+left1 (x, y) = (x - 1, y)
+
 paddleUp1 :: Paddle -> Paddle
 paddleUp1 p = p { getPaddlePos = up1 (getPaddlePos p) }
 
 paddleDown1 :: Paddle -> Paddle
 paddleDown1 p = p { getPaddlePos = down1 (getPaddlePos p) }
+
+paddleRight1 :: Paddle -> Paddle
+paddleRight1 p = p { getPaddlePos = right1 (getPaddlePos p) }
+
+paddleLeft1 :: Paddle -> Paddle
+paddleLeft1 p = p { getPaddlePos = left1 (getPaddlePos p) }
 
 updateBall :: Ball -> Ball
 updateBall ball =
@@ -110,6 +123,17 @@ updateBall ball =
   in ball { getBallPos = (x', y')
           , getBallHeading = snd (properFraction a'')
           }
+
+-- Flip x axis direction without affecting y axis
+bounceXAxis :: Float -> Float
+bounceXAxis a = snd (properFraction (0.5 - a))
+
+-- Flip y axis direction without affecting x axis
+bounceYAxis :: Float -> Float
+bounceYAxis a =
+  if (a > 0 && a <= 0.5) || (a < 0 && a > -0.5)
+  then snd (properFraction (1 - a))
+  else snd (properFraction (-a))
 
 normalizeAngle :: Float -> Float
 normalizeAngle a = snd (properFraction a)
@@ -208,41 +232,52 @@ main = do
 
       -- Possibly modify game state, or use the last one. Check if a key is
       -- pressed down, and do the state modification.
-      let gameState' =
+      let gameState1 =
             if | keyMap SDL.ScancodeUp   -> oldGameState { getPaddle2 = paddleUp1 (getPaddle2 oldGameState) }
                | keyMap SDL.ScancodeDown -> oldGameState { getPaddle2 = paddleDown1 (getPaddle2 oldGameState) }
-               | keyMap SDL.ScancodeW    -> oldGameState { getPaddle1 = paddleUp1 (getPaddle1 oldGameState) }
-               | keyMap SDL.ScancodeS    -> oldGameState { getPaddle1 = paddleDown1 (getPaddle1 oldGameState) }
+               | keyMap SDL.ScancodeRight   -> oldGameState { getPaddle2 = paddleRight1 (getPaddle2 oldGameState) }
+               | keyMap SDL.ScancodeLeft -> oldGameState { getPaddle2 = paddleLeft1 (getPaddle2 oldGameState) }
                | otherwise -> oldGameState
 
+      let gameState2 =
+            if | keyMap SDL.ScancodeW    -> gameState1 { getPaddle1 = paddleUp1 (getPaddle1 gameState1) }
+               | keyMap SDL.ScancodeS    -> gameState1 { getPaddle1 = paddleDown1 (getPaddle1 gameState1) }
+               | otherwise -> gameState1
+
       -- Update ball position.
-      let gameState'' = gameState' { getBall = updateBall (getBall gameState') }
+      let gameState3 = gameState2 { getBall = updateBall (getBall gameState2) }
 
       -- Check for paddle-ball collisions.
-      let collisionReport = checkCollision (paddleToObject (getPaddle1 gameState'')) (ballToObject (getBall gameState''))
-      let gameState''' =
-            case collisionReport of
-              NotCollided -> gameState''
+      let paddle2Collision = checkCollision (paddleToObject (getPaddle2 gameState3)) (ballToObject (getBall gameState3))
+      let gameState4 =
+            case paddle2Collision of
+              NotCollided -> gameState3
               Collided a v ->
-                 let ball = (getBall gameState'')
-                     r = getBallRadius ball
-                     ball' = ball { getBallRadius = -a }
-                     -- ^ This is wrong, but to just test
-                 in gameState'' { getBall = ball' }
+                 let ball = getBall gameState3
+                     (x, y) = getBallPos ball
+                     heading = if a == 0 || a == 0.5 then bounceXAxis (getBallHeading ball) else bounceYAxis (getBallHeading ball)
+                     -- TODO we need I think to _move_ the ball. Otherwise, we
+                     -- will continually get "collided" and weird behavior shows
+                     -- up.
+                     ball' = ball { getBallHeading = heading
+                                  , getBallPos = (x + (v * cos a), y + (v * sin a))
+                                  -- ^ TODO Fix
+                                  }
+                 in gameState3 { getBall = ball' }
 
       -- Initialize the backbuffer
       SDL.clear renderer
 
       -- Draw stuff into buffer
       SDL.copy renderer textureBackground Nothing Nothing
-      SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall gameState'')))
-      SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 gameState'')))
-      SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 gameState'')))
+      SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall gameState4)))
+      SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 gameState4)))
+      SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 gameState4)))
 
       -- Flip the buffer and render!
       SDL.present renderer
 
-      unless quit (loop gameState'')
+      unless quit (loop gameState4)
 
   -- Start the main loop.
   loop startingGameState
