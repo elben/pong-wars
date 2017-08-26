@@ -17,6 +17,8 @@ import qualified SDL
 import qualified SDL.Image
 import qualified SDL.TTF
 
+import Debug.Trace
+
 import PongWars.Collision
 
 import Paths_pong_wars (getDataFileName)
@@ -78,17 +80,17 @@ paddleToObject p = AABB Wall (getPaddlePos p) (getPaddleHalfWidth p) (getPaddleH
 ballToObject :: Ball -> Object
 ballToObject b = AABB Movable (getBallPos b) (getBallRadius b) (getBallRadius b)
 
-wallTop :: AABB
-wallTop = AABB Wall (maxWidth / 2, 0) (maxWidth / 2 + 1) 1
+wallTop :: Object
+wallTop = AABB Wall (maxWidth / 2, -5) (maxWidth / 2 + 1) 5
 
-wallBottom :: AABB
-wallBottom = AABB Wall (maxWidth / 2, maxHeight) (maxWidth / 2 + 1) 1
+wallBottom :: Object
+wallBottom = AABB Wall (maxWidth / 2, maxHeight + 5) (maxWidth / 2 + 1) 5
 
-wallLeft :: AABB
-wallLeft = AABB Wall (0, maxHeight / 2) 1 (maxHeight / 2 + 1)
+wallLeft :: Object
+wallLeft = AABB Wall (-5, maxHeight / 2) 5 (maxHeight / 2 + 1)
 
-wallRight :: AABB
-wallRight = AABB Wall (maxWidth, maxHeight / 2) 1 (maxHeight / 2 + 1)
+wallRight :: Object
+wallRight = AABB Wall (maxWidth + 5, maxHeight / 2) 5 (maxHeight / 2 + 1)
 
 posUp1 :: Point V2 CInt -> Point V2 CInt
 posUp1 (P (V2 x y)) = (P (V2 x (y - 10)))
@@ -120,6 +122,14 @@ paddleRight1 p = p { getPaddlePos = right1 (getPaddlePos p) }
 paddleLeft1 :: Paddle -> Paddle
 paddleLeft1 p = p { getPaddlePos = left1 (getPaddlePos p) }
 
+-- | Normalize heading into the range of [0, 1)
+normalizeHeading :: Float -> Float
+normalizeHeading a =
+  let a' = snd $ properFraction a
+  in if a' < 0
+     then a' + 1
+     else a'
+
 updateBall :: Ball -> Ball
 updateBall ball =
   let (x, y) = getBallPos ball
@@ -129,31 +139,28 @@ updateBall ball =
       y' = y + (v * sin (toRadian a))
 
       -- Check for wall bounces
-      a' = if x' <= 0 || x' >= maxWidth
-             then 0.5 - a
-             else a
-      a'' = if y' <= 0
-             then 1 - a'
-             else if y' >= maxHeight
-                  then -a'
-                  else a'
+      -- a' = if x' <= 0 || x' >= maxWidth
+      --        then 0.5 - a
+      --        else a
+      -- a'' = if y' <= 0
+      --        then 1 - a'
+      --        else if y' >= maxHeight
+      --             then -a'
+      --             else a'
   in ball { getBallPos = (x', y')
-          , getBallHeading = snd (properFraction a'')
+          -- , getBallHeading = normalizeHeading a''
           }
 
 -- Flip x axis direction without affecting y axis
 bounceXAxis :: Float -> Float
-bounceXAxis a = snd (properFraction (0.5 - a))
+bounceXAxis a = normalizeHeading (0.5 - a)
 
 -- Flip y axis direction without affecting x axis
 bounceYAxis :: Float -> Float
 bounceYAxis a =
-  if (a > 0 && a <= 0.5) || (a < 0 && a > -0.5)
-  then snd (properFraction (1 - a))
-  else snd (properFraction (-a))
-
-normalizeAngle :: Float -> Float
-normalizeAngle a = snd (properFraction a)
+  if a > 0 && a <= 0.5
+  then normalizeHeading (1 - a)
+  else normalizeHeading (-a)
 
 toRadian :: Float -> Float
 toRadian a = 2 * pi * a
@@ -170,11 +177,78 @@ toRectBall b =
 toRectPaddle :: Paddle -> Rectangle CInt
 toRectPaddle p =
   let (x, y) = getPaddlePos p
-      (halfW) = getPaddleHalfWidth p
-      (halfH) = getPaddleHalfHeight p
+      halfW = getPaddleHalfWidth p
+      halfH = getPaddleHalfHeight p
   -- A rectangle's position is defined by the top-left corner. To find that,
   -- take the position and move it by its half-widths/heights.
   in Rectangle (toPV2 (x - halfW, y - halfH)) (V2 20 80)
+
+ballWallCollision :: GameState -> GameState
+ballWallCollision gameState =
+  let topReport = checkCollision wallTop (ballToObject (getBall gameState))
+      bottomReport = checkCollision wallBottom (ballToObject (getBall gameState))
+      rightReport = checkCollision wallRight (ballToObject (getBall gameState))
+      leftReport = checkCollision wallLeft (ballToObject (getBall gameState))
+      b1 = updateBallStateInCollision topReport (getBall gameState)
+      b2 = updateBallStateInCollision bottomReport b1
+      b3 = updateBallStateInCollision rightReport b2
+      b4 = updateBallStateInCollision leftReport b3
+  in gameState { getBall = b4 }
+
+paddleWallCollision :: GameState -> GameState
+paddleWallCollision gameState =
+  let topReport = checkCollision wallTop (paddleToObject (getPaddle1 gameState))
+      bottomReport = checkCollision wallBottom (paddleToObject (getPaddle1 gameState))
+      rightReport = checkCollision wallRight (paddleToObject (getPaddle1 gameState))
+      leftReport = checkCollision wallLeft (paddleToObject (getPaddle1 gameState))
+      p11 = updatePaddleStateInCollision topReport (getPaddle1 gameState)
+      p12 = updatePaddleStateInCollision bottomReport p11
+      p13 = updatePaddleStateInCollision rightReport p12
+      p14 = updatePaddleStateInCollision leftReport p13
+  in gameState { getPaddle1 = p14 }
+
+updatePaddleStateInCollision :: Report -> Paddle -> Paddle
+updatePaddleStateInCollision report paddle =
+  case report of
+    NotCollided -> paddle
+    Collided a d ->
+       -- Update the ball's position to get it out of collision.
+       let (x, y) = getPaddlePos paddle
+       in paddle { getPaddlePos = (x + (d * cos (toRadian a)), y + (d * sin (toRadian a))) }
+
+-- | Change direction if needed, given the projection vector heading.
+changeDirection :: Float -- Current heading
+                -> Float -- Projection vector heading
+                -> Float -- New heading
+changeDirection a pvh =
+  let a' = if | pvh == 0.0 -> if a <= 0.25 || a >= 0.75 then a else bounceXAxis a
+              | pvh == 0.5 -> if a >= 0.25 && a <= 0.75 then a else bounceXAxis a
+              | pvh == 0.25 -> if a >= 0 && a <= 0.5 then a else bounceYAxis a
+              | pvh == 0.75 -> if a >= 0.5 && a < 1 then a else bounceYAxis a
+              | otherwise -> a
+  in a'
+
+updateBallStateInCollision :: Report -> Ball -> Ball
+updateBallStateInCollision report ball =
+  case report of
+    NotCollided -> ball
+    Collided a d ->
+       -- Update the ball's position to get it out of collision (we
+       -- don't want to trigger another collision the next check).
+       -- Also modify the ball's heading.
+       let (x, y) = getBallPos ball
+       in ball { getBallHeading = changeDirection (getBallHeading ball) a
+               , getBallPos = (x + (d * cos (toRadian a)), y + (d * sin (toRadian a)))
+               -- ^ Project ball out of collision.
+               }
+
+ballPaddleCollision :: GameState -> GameState
+ballPaddleCollision gameState =
+  let paddle1Collision = checkCollision (paddleToObject (getPaddle1 gameState)) (ballToObject (getBall gameState))
+      paddle2Collision = checkCollision (paddleToObject (getPaddle2 gameState)) (ballToObject (getBall gameState))
+      gameState' = gameState { getBall = updateBallStateInCollision paddle1Collision (getBall gameState) }
+      gameState'' = gameState { getBall = updateBallStateInCollision paddle2Collision (getBall gameState') }
+  in gameState''
 
 main :: IO ()
 main = do
@@ -253,43 +327,31 @@ main = do
       let gameState2 =
             if | keyMap SDL.ScancodeW    -> gameState1 { getPaddle1 = paddleUp1 (getPaddle1 gameState1) }
                | keyMap SDL.ScancodeS    -> gameState1 { getPaddle1 = paddleDown1 (getPaddle1 gameState1) }
+               | keyMap SDL.ScancodeD    -> gameState1 { getPaddle1 = paddleRight1 (getPaddle1 gameState1) }
+               | keyMap SDL.ScancodeA    -> gameState1 { getPaddle1 = paddleLeft1 (getPaddle1 gameState1) }
                | otherwise -> gameState1
 
       -- Update ball position.
       let gameState3 = gameState2 { getBall = updateBall (getBall gameState2) }
 
       -- Check for paddle-ball collisions.
-      let paddle2Collision = checkCollision (paddleToObject (getPaddle2 gameState3)) (ballToObject (getBall gameState3))
-      let gameState4 =
-            case paddle2Collision of
-              NotCollided -> gameState3
-              Collided a d ->
-                 -- Update the ball's position to get it out of collision (we
-                 -- don't want to trigger another collision the next check).
-                 -- Also modify the ball's heading.
-                 let ball = getBall gameState3
-                     (x, y) = getBallPos ball
-                     heading = if a == 0 || a == 0.5 then bounceXAxis (getBallHeading ball) else bounceYAxis (getBallHeading ball)
-                     ball' = ball { getBallHeading = heading
-                                  , getBallPos = (x + (d * cos (toRadian a)), y + (d * sin (toRadian a)))
-                                  -- ^ Project ball out of collision. Use ceiling so that we don't round down
-                                  -- into another collision at the next check.
-                                  }
-                 in gameState3 { getBall = ball' }
+      let gameState4 = ballWallCollision gameState3
+      let gameState5 = paddleWallCollision gameState4
+      let gameState6 = ballPaddleCollision gameState5
 
       -- Initialize the backbuffer
       SDL.clear renderer
 
       -- Draw stuff into buffer
       SDL.copy renderer textureBackground Nothing Nothing
-      SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall gameState4)))
-      SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 gameState4)))
-      SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 gameState4)))
+      SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall gameState6)))
+      SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 gameState6)))
+      SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 gameState6)))
 
       -- Flip the buffer and render!
       SDL.present renderer
 
-      unless quit (loop gameState4)
+      unless quit (loop gameState6)
 
   -- Start the main loop.
   loop startingGameState

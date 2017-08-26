@@ -2,6 +2,8 @@
 
 module PongWars.Collision where
 
+import Debug.Trace
+
 -- Differentiates between movable objects and walls. This is so the collision
 -- detector knows, upon collision, how to build the projection vector, and which
 -- object to move out of the way.
@@ -32,7 +34,9 @@ checkCollision (AABB t1 (x1, y1) hw1 hh1) (AABB t2 (x2, y2) hw2 hh2) =
              let a = if isMovable t1 then 0.5 else 0
              in Collided a ((x1 + hw1) - (x2 - hw2))
            -- ^ Object 1 is left of 2, and 1 collided with 2 from the left.
-           -- Projection vector value `d` is the amount of collision.
+           -- Projection vector value `d` is the amount of collision. Direction
+           -- is the direction that the non-movable object should be moved to
+           -- get out of collision.
            | x1 >= x2 && (x1 - hw1) <= (x2 + hw2) ->
              let a = if isMovable t1 then 0 else 0.5
              in Collided a ((x2 + hw2) - (x1 - hw1))
@@ -44,7 +48,7 @@ checkCollision (AABB t1 (x1, y1) hw1 hh1) (AABB t2 (x2, y2) hw2 hh2) =
              in Collided a ((y1 + hh1) - (y2 - hh2))
            -- ^ 1 collided with 2 from the top.
            | y1 >= y2 && (y1 - hh1) <= (y2 + hh2) ->
-             let a = if isMovable t1 then 0.75 else 0.25
+             let a = if isMovable t1 then 0.25 else 0.75
              in Collided a ((y2 + hh2) - (y1 - hh1))
            -- ^ 1 collided with 2 from the bottom.
            | otherwise -> NotCollided
