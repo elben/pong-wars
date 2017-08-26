@@ -74,29 +74,38 @@ data Ball = Ball
   , getBallSpinVelocity :: Float  -- ^ Amount of velocity pushing perpendicular of heading, in pixels/tick.
   }
 
+massWall :: Mass
+massWall = 100
+
+massPaddle :: Mass
+massPaddle = 50
+
+massBall :: Mass
+massBall = 10
+
 paddleToObject :: Paddle -> Object
-paddleToObject p = AABB Wall (getPaddlePos p) (getPaddleHalfWidth p) (getPaddleHalfHeight p)
+paddleToObject p = AABB massPaddle (getPaddlePos p) (getPaddleHalfWidth p) (getPaddleHalfHeight p)
 
 ballToObject :: Ball -> Object
-ballToObject b = AABB Movable (getBallPos b) (getBallRadius b) (getBallRadius b)
+ballToObject b = AABB massBall (getBallPos b) (getBallRadius b) (getBallRadius b)
 
 wallTop :: Object
-wallTop = AABB Wall (maxWidth / 2, -5) (maxWidth / 2 + 1) 5
+wallTop = AABB massWall (maxWidth / 2, -50) (maxWidth / 2 + 1) 50
 
 wallBottom :: Object
-wallBottom = AABB Wall (maxWidth / 2, maxHeight + 5) (maxWidth / 2 + 1) 5
+wallBottom = AABB massWall (maxWidth / 2, maxHeight + 50) (maxWidth / 2 + 1) 50
 
 wallLeft :: Object
-wallLeft = AABB Wall (-5, maxHeight / 2) 5 (maxHeight / 2 + 1)
+wallLeft = AABB massWall (-50, maxHeight / 2) 50 (maxHeight / 2 + 1)
 
 wallRight :: Object
-wallRight = AABB Wall (maxWidth + 5, maxHeight / 2) 5 (maxHeight / 2 + 1)
+wallRight = AABB massWall (maxWidth + 50, maxHeight / 2) 50 (maxHeight / 2 + 1)
 
 posUp1 :: Point V2 CInt -> Point V2 CInt
-posUp1 (P (V2 x y)) = (P (V2 x (y - 10)))
+posUp1 (P (V2 x y)) = P (V2 x (y - 10))
 
 posDown1 :: Point V2 CInt -> Point V2 CInt
-posDown1 (P (V2 x y)) = (P (V2 x (y + 10)))
+posDown1 (P (V2 x y)) = P (V2 x (y + 10))
 
 up1 :: (Float, Float) -> (Float, Float)
 up1 (x, y) = (x, y - 1)
@@ -125,7 +134,7 @@ paddleLeft1 p = p { getPaddlePos = left1 (getPaddlePos p) }
 -- | Normalize heading into the range of [0, 1)
 normalizeHeading :: Float -> Float
 normalizeHeading a =
-  let a' = snd $ properFraction a
+  let a' = snd (properFraction a :: (Integer, Float))
   in if a' < 0
      then a' + 1
      else a'
@@ -288,7 +297,7 @@ main = do
             -- pointing to the right, 0.25 points down (clockwise, because
             -- y increases downwards), and 0.5 the vector pointing to the
             -- left.
-            , getBallHeading = 0.15
+            , getBallHeading = 0.75
 
             -- This is not a good model for a curve-ball or spinning
             -- ball. Just creates a perfect circle. Need some kind of polynomial shape.
