@@ -21,8 +21,8 @@ executable pong-wars
   default-language:    Haskell2010
   build-depends:       base >= 4.7 && < 5
                      , sdl2
-                     , sdl2-image
-                     , sdl2-ttf
+                     , sdl2-image >= 2.0
+                     -- , sdl2-ttf
                      -- Test deps below are listed here just for development, so
                      -- that ghc-mod picks it up.
                      , HUnit

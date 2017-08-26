@@ -15,7 +15,6 @@ import SDL.Vect
 import SDL.Video.Renderer
 import qualified SDL
 import qualified SDL.Image
-import qualified SDL.TTF
 
 import Debug.Trace
 
@@ -30,10 +29,6 @@ maxHeight = 600
 
 screenWidth, screenHeight :: CInt
 (screenWidth, screenHeight) = (800, 600)
-
--- https://hackage.haskell.org/package/sdl2-ttf-1.0.0/src/examples/font_test.hs
--- red :: SDL.Font.Color
--- red = SDL.V4 255 0 0 0
 
 loadImage :: FilePath -> IO SDL.Surface
 loadImage fp = getDataFileName fp >>= SDL.Image.load
@@ -50,13 +45,14 @@ loadTexture r filePath = do
   SDL.freeSurface surface
   return t
 
-
 data GameState = GameState
   { getBall :: Ball
   , getPaddle1 :: Paddle
   , getPaddle2 :: Paddle
-  -- , posB :: Point V2 CInt -- ^ (x, y) coordinates of paddle B
+  , getScore1 :: Int
+  , getScore2 :: Int
   }
+  deriving (Show)
 
 -- A Paddle state consist of its position, which represents the center of the
 -- paddle, and the half-width/height dimensions.
@@ -65,6 +61,7 @@ data Paddle = Paddle
   , getPaddleHalfWidth :: Float
   , getPaddleHalfHeight :: Float
   }
+  deriving Show
 
 data Ball = Ball
   { getBallPos :: (Float, Float) -- ^ (x, y) coordinates of center of ball
@@ -73,6 +70,7 @@ data Ball = Ball
   , getBallHeading :: Float     -- ^ Degree of direction, where 0 is to the right, counter-clockwise.
   , getBallSpinVelocity :: Float  -- ^ Amount of velocity pushing perpendicular of heading, in pixels/tick.
   }
+  deriving Show
 
 massWall :: Mass
 massWall = 100
@@ -202,7 +200,15 @@ ballWallCollision gameState =
       b2 = updateBallStateInCollision bottomReport b1
       b3 = updateBallStateInCollision rightReport b2
       b4 = updateBallStateInCollision leftReport b3
-  in gameState { getBall = b4 }
+      score1Incr = if isCollided rightReport then 1 else 0
+      score2Incr = if isCollided leftReport then 1 else 0
+      gameState' = gameState { getBall = b4
+                             , getScore1 = getScore1 gameState + score1Incr
+                             , getScore2 = getScore2 gameState + score2Incr
+                             }
+  in if score1Incr > 0 || score2Incr > 0
+     then traceShowId gameState' -- Force a trace
+     else gameState'
 
 paddleWallCollision :: GameState -> GameState
 paddleWallCollision gameState =
@@ -297,7 +303,7 @@ main = do
             -- pointing to the right, 0.25 points down (clockwise, because
             -- y increases downwards), and 0.5 the vector pointing to the
             -- left.
-            , getBallHeading = 0.75
+            , getBallHeading = 0.15
 
             -- This is not a good model for a curve-ball or spinning
             -- ball. Just creates a perfect circle. Need some kind of polynomial shape.
@@ -315,6 +321,8 @@ main = do
             , getPaddleHalfWidth = 10
             , getPaddleHalfHeight = 40
             }
+        , getScore1 = 0
+        , getScore2 = 0
        }
     loop oldGameState = do
       -- Get all buffered keyboard events
