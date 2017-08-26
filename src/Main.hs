@@ -10,6 +10,7 @@ import Data.Maybe
 import Data.Monoid
 import Foreign.C.Types
 import Prelude hiding (any, mapM_)
+import SDL (($=))
 import SDL.Vect
 import SDL.Video.Renderer
 import qualified SDL
@@ -20,7 +21,9 @@ import PongWars.Collision
 
 import Paths_pong_wars (getDataFileName)
 
+maxWidth :: Float
 maxWidth = 800
+maxHeight :: Float
 maxHeight = 600
 
 screenWidth, screenHeight :: CInt
@@ -36,13 +39,15 @@ loadImage fp = getDataFileName fp >>= SDL.Image.load
 loadBMPSurface :: FilePath -> IO SDL.Surface
 loadBMPSurface path = getDataFileName path >>= SDL.loadBMP
 
--- | Load image as Surface on the given Surface. Optimized by converting new
--- Surface to the given Surface.
-loadSurface :: SDL.Surface -> FilePath -> IO SDL.Surface
-loadSurface screenSurface path = do
-  loadedSurface <- loadImage path
-  desiredFormat <- SDL.surfaceFormat screenSurface
-  SDL.convertSurface loadedSurface desiredFormat <* SDL.freeSurface loadedSurface
+loadTexture :: SDL.Renderer -> FilePath -> IO SDL.Texture
+loadTexture r filePath = do
+  surface <- getDataFileName filePath >>= SDL.loadBMP
+  let key = V4 0 0 0 0
+  SDL.surfaceColorKey surface $= Just key
+  t <- SDL.createTextureFromSurface r surface
+  SDL.freeSurface surface
+  return t
+
 
 data GameState = GameState
   { getBall :: Ball
@@ -72,6 +77,18 @@ paddleToObject p = AABB Wall (getPaddlePos p) (getPaddleHalfWidth p) (getPaddleH
 
 ballToObject :: Ball -> Object
 ballToObject b = AABB Movable (getBallPos b) (getBallRadius b) (getBallRadius b)
+
+wallTop :: AABB
+wallTop = AABB Wall (maxWidth / 2, 0) (maxWidth / 2 + 1) 1
+
+wallBottom :: AABB
+wallBottom = AABB Wall (maxWidth / 2, maxHeight) (maxWidth / 2 + 1) 1
+
+wallLeft :: AABB
+wallLeft = AABB Wall (0, maxHeight / 2) 1 (maxHeight / 2 + 1)
+
+wallRight :: AABB
+wallRight = AABB Wall (maxWidth, maxHeight / 2) 1 (maxHeight / 2 + 1)
 
 posUp1 :: Point V2 CInt -> Point V2 CInt
 posUp1 (P (V2 x y)) = (P (V2 x (y - 10)))
@@ -165,7 +182,7 @@ main = do
 
   -- Hint to SDL that we prefer to scale using linear filtering. Warn if not
   -- available.
-  SDL.HintRenderScaleQuality SDL.$= SDL.ScaleLinear
+  SDL.HintRenderScaleQuality $= SDL.ScaleLinear
   do renderQuality <- SDL.get SDL.HintRenderScaleQuality
      when (renderQuality /= SDL.ScaleLinear) $
        putStrLn "Warning: Linear texture filtering not enabled!"
@@ -180,15 +197,9 @@ main = do
                   , SDL.rendererTargetTexture = False
                   }
 
-  surfaceBackground <- loadBMPSurface "resources/images/background.bmp"
-  surfaceBall <- loadBMPSurface "resources/images/ball.bmp"
-  surfacePaddle <- loadBMPSurface "resources/images/paddle.bmp"
-
-  textureBackground <- SDL.createTextureFromSurface renderer surfaceBackground
-  textureBall <- SDL.createTextureFromSurface renderer surfaceBall
-  texturePaddle <- SDL.createTextureFromSurface renderer surfacePaddle
-
-  mapM_ SDL.freeSurface [ surfaceBackground, surfaceBall, surfacePaddle ]
+  textureBackground <- loadTexture renderer "resources/images/background.bmp"
+  textureBall <- loadTexture renderer "resources/images/ball.bmp"
+  texturePaddle <- loadTexture renderer "resources/images/paddle.bmp"
 
   let
     startingGameState =
