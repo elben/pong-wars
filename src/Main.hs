@@ -268,6 +268,14 @@ ballPaddleCollision gameState =
 toCInt :: Int -> CInt
 toCInt = fromIntegral
 
+renderText :: Renderer -> Font.Font -> Font.Color -> (Int, Int) -> T.Text -> IO ()
+renderText renderer font color pos text = do
+  blendedText <- Font.blended font color text
+  (w, h) <- Font.size font text
+  texture <- SDL.createTextureFromSurface renderer blendedText
+  SDL.copy renderer texture Nothing (Just (Rectangle (P (V2 (toCInt $ fst pos) (toCInt $ snd pos))) (V2 (toCInt w) (toCInt h))))
+  SDL.destroyTexture texture
+
 main :: IO ()
 main = do
   SDL.initialize [SDL.InitVideo]
@@ -400,19 +408,8 @@ main = do
             SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 gameState6)))
             SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 gameState6)))
 
-            let fps = T.pack (show (getFps gameState6) ++ " fps")
-            fpsText <- Font.blended scoreFont fontColorWhite fps
-            (fontWFps, fontHFps) <- Font.size scoreFont fps
-            textureFps <- SDL.createTextureFromSurface renderer fpsText
-            SDL.copy renderer textureFps Nothing (Just (Rectangle (P (V2 400 0)) (V2 (toCInt fontWFps) (toCInt fontHFps))))
-            SDL.destroyTexture textureFps
-
-            let score1 = T.pack $ show $ getScore1 gameState6
-            score1Text <- Font.blended scoreFont fontColorWhite score1
-            (fontW, fontH) <- Font.size scoreFont score1
-            textureScore1 <- SDL.createTextureFromSurface renderer score1Text
-            SDL.copy renderer textureScore1 Nothing (Just (Rectangle (P (V2 0 0)) (V2 (toCInt fontW) (toCInt fontH))))
-            SDL.destroyTexture textureScore1
+            renderText renderer scoreFont fontColorWhite (400, 0) (T.pack $ show (getFps gameState6) ++ " fps")
+            renderText renderer scoreFont fontColorWhite (0, 0) (T.pack $ show (getScore1 gameState6))
 
             -- Flip the buffer and render!
             SDL.present renderer
