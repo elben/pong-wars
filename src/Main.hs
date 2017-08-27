@@ -3,19 +3,15 @@
 
 module Main (main) where
 
-import Control.Concurrent (threadDelay)
 import Control.Monad hiding (mapM_)
-import Data.Foldable hiding (elem)
 import Data.Maybe
-import Data.Monoid
 import Foreign.C.Types
 import Prelude hiding (any, mapM_)
 import SDL (($=))
+import qualified SDL.Font as Font
 import SDL.Vect
 import SDL.Video.Renderer
-import SDL.Font
 import qualified SDL
-import qualified SDL.Image
 
 import Debug.Trace
 
@@ -31,14 +27,8 @@ maxHeight = 600
 screenWidth, screenHeight :: CInt
 (screenWidth, screenHeight) = (800, 600)
 
-red :: SDL.Font.Color
+red :: Font.Color
 red = SDL.V4 255 0 0 0
-
-loadImage :: FilePath -> IO SDL.Surface
-loadImage fp = getDataFileName fp >>= SDL.Image.load
-
-loadBMPSurface :: FilePath -> IO SDL.Surface
-loadBMPSurface path = getDataFileName path >>= SDL.loadBMP
 
 -- | Load a Texture, which is a hardware-stored pixel blobs (images, fonts).
 -- Comparatively, a Surface is software-rendered.
@@ -110,12 +100,6 @@ wallLeft = AABB massWall (-50, maxHeight / 2) 50 (maxHeight / 2 + 1)
 
 wallRight :: Object
 wallRight = AABB massWall (maxWidth + 50, maxHeight / 2) 50 (maxHeight / 2 + 1)
-
-posUp1 :: Point V2 CInt -> Point V2 CInt
-posUp1 (P (V2 x y)) = P (V2 x (y - 10))
-
-posDown1 :: Point V2 CInt -> Point V2 CInt
-posDown1 (P (V2 x y)) = P (V2 x (y + 10))
 
 up1 :: (Float, Float) -> (Float, Float)
 up1 (x, y) = (x, y - 1)
@@ -283,7 +267,7 @@ toCInt = fromIntegral
 main :: IO ()
 main = do
   SDL.initialize [SDL.InitVideo]
-  SDL.Font.initialize
+  Font.initialize
 
   -- Hint to SDL that we prefer to scale using linear filtering. Warn if not
   -- available.
@@ -309,9 +293,9 @@ main = do
 
   font <- do
     fp <- getDataFileName "resources/fonts/overpass/overpass-bold.otf"
-    SDL.Font.load fp 40
+    Font.load fp 40
 
-  text <- SDL.Font.blended font red "Solid!"
+  text <- Font.blended font red "Solid!"
   textureText <- SDL.createTextureFromSurface renderer text
 
   let
@@ -413,7 +397,7 @@ main = do
             SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 gameState6)))
 
             -- How to decide on size: https://github.com/haskell-game/sdl2-ttf/blob/master/src/SDL/Font.hs#L454
-            (fontW, fontH) <- SDL.Font.size font "Solid!"
+            (fontW, fontH) <- Font.size font "Solid!"
             SDL.copy renderer textureText Nothing (Just (Rectangle (P (V2 0 0)) (V2 (toCInt fontW) (toCInt fontH))))
 
             -- Flip the buffer and render!
@@ -432,6 +416,6 @@ main = do
   SDL.destroyTexture textureMenu
 
   SDL.destroyWindow window
-  SDL.Font.quit
+  Font.quit
   SDL.quit
 
