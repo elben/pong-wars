@@ -5,6 +5,7 @@ module Main (main) where
 
 import Control.Monad hiding (mapM_)
 import Data.Maybe
+import qualified Data.Text as T
 import Foreign.C.Types
 import Prelude hiding (any, mapM_)
 import SDL (($=))
@@ -27,8 +28,8 @@ maxHeight = 600
 screenWidth, screenHeight :: CInt
 (screenWidth, screenHeight) = (800, 600)
 
-red :: Font.Color
-red = SDL.V4 255 0 0 0
+fontColorWhite :: Font.Color
+fontColorWhite = SDL.V4 255 255 255 0
 
 -- | Load a Texture, which is a hardware-stored pixel blobs (images, fonts).
 -- Comparatively, a Surface is software-rendered.
@@ -291,12 +292,9 @@ main = do
   textureBall <- loadTexture renderer "resources/images/ball.bmp"
   texturePaddle <- loadTexture renderer "resources/images/paddle.bmp"
 
-  font <- do
+  scoreFont <- do
     fp <- getDataFileName "resources/fonts/overpass/overpass-bold.otf"
     Font.load fp 40
-
-  text <- Font.blended font red "Solid!"
-  textureText <- SDL.createTextureFromSurface renderer text
 
   let
     startingGameState =
@@ -396,12 +394,18 @@ main = do
             SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 gameState6)))
             SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 gameState6)))
 
-            -- How to decide on size: https://github.com/haskell-game/sdl2-ttf/blob/master/src/SDL/Font.hs#L454
-            (fontW, fontH) <- Font.size font "Solid!"
-            SDL.copy renderer textureText Nothing (Just (Rectangle (P (V2 0 0)) (V2 (toCInt fontW) (toCInt fontH))))
+            let score1 = T.pack $ show $ getScore1 gameState6
+            score1Text <- Font.blended scoreFont fontColorWhite score1
+            (fontW, fontH) <- Font.size scoreFont score1
+            textureScore1 <- SDL.createTextureFromSurface renderer score1Text
+            SDL.copy renderer textureScore1 Nothing (Just (Rectangle (P (V2 0 0)) (V2 (toCInt fontW) (toCInt fontH))))
 
             -- Flip the buffer and render!
             SDL.present renderer
+
+            -- Free temporary data
+            SDL.destroyTexture textureScore1
+
             return gameState6
 
       unless (getScreen gameState'' == Quit) (loop gameState'')
@@ -412,7 +416,6 @@ main = do
   SDL.destroyTexture textureBackground
   SDL.destroyTexture textureBall
   SDL.destroyTexture texturePaddle
-  SDL.destroyTexture textureText
   SDL.destroyTexture textureMenu
 
   SDL.destroyWindow window
