@@ -106,16 +106,16 @@ wallRight :: Object
 wallRight = AABB massWall (maxWidth + 50, maxHeight / 2) 50 (maxHeight / 2 + 1)
 
 up1 :: (Float, Float) -> (Float, Float)
-up1 (x, y) = (x, y - 1)
+up1 (x, y) = (x, y - 10)
 
 down1 :: (Float, Float) -> (Float, Float)
-down1 (x, y) = (x, y + 1)
+down1 (x, y) = (x, y + 10)
 
 right1 :: (Float, Float) -> (Float, Float)
-right1 (x, y) = (x + 1, y)
+right1 (x, y) = (x + 10, y)
 
 left1 :: (Float, Float) -> (Float, Float)
-left1 (x, y) = (x - 1, y)
+left1 (x, y) = (x - 10, y)
 
 paddleUp1 :: Paddle -> Paddle
 paddleUp1 p = p { getPaddlePos = up1 (getPaddlePos p) }
@@ -307,7 +307,7 @@ main = do
             Ball
             { getBallPos = (100, 100)
             , getBallRadius = 10
-            , getBallVelocity = 1
+            , getBallVelocity = 5
 
             -- Heading, number from 0 to 1. 0 should be the vector
             -- pointing to the right, 0.25 points down (clockwise, because
