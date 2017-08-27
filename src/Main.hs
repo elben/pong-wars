@@ -13,6 +13,8 @@ import qualified SDL.Font as Font
 import SDL.Vect
 import SDL.Video.Renderer
 import qualified SDL
+import qualified System.Clock as Clock
+import System.Posix.Unistd (nanosleep)
 
 import Debug.Trace
 
@@ -54,6 +56,7 @@ data GameState = GameState
   , getPaddle2 :: Paddle
   , getScore1 :: Int
   , getScore2 :: Int
+  , getFps :: Integer
   }
   deriving (Show)
 
@@ -304,7 +307,7 @@ main = do
             Ball
             { getBallPos = (100, 100)
             , getBallRadius = 10
-            , getBallVelocity = 0.5
+            , getBallVelocity = 1
 
             -- Heading, number from 0 to 1. 0 should be the vector
             -- pointing to the right, 0.25 points down (clockwise, because
@@ -330,9 +333,12 @@ main = do
             }
         , getScore1 = 0
         , getScore2 = 0
+        , getFps = 0
        }
 
     loop oldGameState = do
+      startTime <- Clock.getTime Clock.Monotonic
+
       -- Get all buffered keyboard events
       events <- map SDL.eventPayload <$> SDL.pollEvents
       let gameState = oldGameState { getScreen = if SDL.QuitEvent `elem` events then Quit else getScreen oldGameState }
@@ -394,19 +400,35 @@ main = do
             SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 gameState6)))
             SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 gameState6)))
 
+            let fps = T.pack (show (getFps gameState6) ++ " fps")
+            fpsText <- Font.blended scoreFont fontColorWhite fps
+            (fontWFps, fontHFps) <- Font.size scoreFont fps
+            textureFps <- SDL.createTextureFromSurface renderer fpsText
+            SDL.copy renderer textureFps Nothing (Just (Rectangle (P (V2 400 0)) (V2 (toCInt fontWFps) (toCInt fontHFps))))
+            SDL.destroyTexture textureFps
+
             let score1 = T.pack $ show $ getScore1 gameState6
             score1Text <- Font.blended scoreFont fontColorWhite score1
             (fontW, fontH) <- Font.size scoreFont score1
             textureScore1 <- SDL.createTextureFromSurface renderer score1Text
             SDL.copy renderer textureScore1 Nothing (Just (Rectangle (P (V2 0 0)) (V2 (toCInt fontW) (toCInt fontH))))
+            SDL.destroyTexture textureScore1
 
             -- Flip the buffer and render!
             SDL.present renderer
 
-            -- Free temporary data
-            SDL.destroyTexture textureScore1
+            -- Attempt to tick at 60 FPS
+            endTime <- Clock.getTime Clock.Monotonic
+            let diffNano = Clock.toNanoSecs $ Clock.diffTimeSpec startTime endTime
+            if diffNano < 16666666
+              then nanosleep (16666666 - diffNano) -- Above 60 FPS
+              else return () -- Slower than 60 FPS
 
-            return gameState6
+            -- Time *after* a potential sleep.
+            tickEndTime <- Clock.getTime Clock.Monotonic
+            let tickDiffNano = Clock.toNanoSecs $ Clock.diffTimeSpec startTime tickEndTime
+
+            return $ gameState6 { getFps = 1000000000 `div` tickDiffNano }
 
       unless (getScreen gameState'' == Quit) (loop gameState'')
 

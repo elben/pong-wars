@@ -25,6 +25,8 @@ executable pong-wars
                      , sdl2-image >= 2.0
                      , sdl2-ttf
                      , text
+                     , clock
+                     , unix
                      -- Test deps below are listed here just for development, so
                      -- that ghc-mod picks it up.
                      , HUnit
