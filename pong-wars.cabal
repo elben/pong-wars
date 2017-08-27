@@ -12,7 +12,8 @@ category:            Game
 build-type:          Simple
 cabal-version:       >=1.10
 extra-source-files:  README.md
-data-files:          resources/images/*.png, resources/images/*.bmp
+data-files:          resources/images/*.png, resources/images/*.bmp,
+                     resources/fonts/overpass/*.otf
 
 executable pong-wars
   hs-source-dirs:      src
@@ -22,7 +23,7 @@ executable pong-wars
   build-depends:       base >= 4.7 && < 5
                      , sdl2
                      , sdl2-image >= 2.0
-                     -- , sdl2-ttf
+                     , sdl2-ttf
                      -- Test deps below are listed here just for development, so
                      -- that ghc-mod picks it up.
                      , HUnit

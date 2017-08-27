@@ -31,10 +31,12 @@ resolver: lts-9.1
 #  subdirs:
 #  - auto-update
 #  - wai
-# packages:
-# - location:
-#    git: git@github.com:haskell-game/sdl2-ttf.git
-#    commit: a4353cd003194c8de73bf61784477cbb9fd713e0
+packages:
+- ./
+- location:
+   git: git@github.com:haskell-game/sdl2-ttf.git
+   commit: a4353cd003194c8de73bf61784477cbb9fd713e0
+  extra-dep: true
 #
 # A package marked 'extra-dep: true' will only be built if demanded by a
 # non-dependency (i.e. a user package), and its test suites and benchmarks
