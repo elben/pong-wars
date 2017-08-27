@@ -45,8 +45,12 @@ loadTexture r filePath = do
   SDL.freeSurface surface
   return t
 
+data Screen = Menu | Play | Quit
+  deriving (Show, Eq)
+
 data GameState = GameState
-  { getBall :: Ball
+  { getScreen :: Screen
+  , getBall :: Ball
   , getPaddle1 :: Paddle
   , getPaddle2 :: Paddle
   , getScore1 :: Int
@@ -286,6 +290,7 @@ main = do
                   , SDL.rendererTargetTexture = False
                   }
 
+  textureMenu <- loadTexture renderer "resources/images/menu.bmp"
   textureBackground <- loadTexture renderer "resources/images/background.bmp"
   textureBall <- loadTexture renderer "resources/images/ball.bmp"
   texturePaddle <- loadTexture renderer "resources/images/paddle.bmp"
@@ -293,7 +298,8 @@ main = do
   let
     startingGameState =
       GameState
-        { getBall =
+        { getScreen = Menu
+        , getBall =
             Ball
             { getBallPos = (100, 100)
             , getBallRadius = 10
@@ -324,51 +330,74 @@ main = do
         , getScore1 = 0
         , getScore2 = 0
        }
+
     loop oldGameState = do
       -- Get all buffered keyboard events
       events <- map SDL.eventPayload <$> SDL.pollEvents
-      let quit = SDL.QuitEvent `elem` events
+      let gameState = oldGameState { getScreen = if SDL.QuitEvent `elem` events then Quit else getScreen oldGameState }
 
       -- A map of keys that are currently pressed down.
       keyMap <- SDL.getKeyboardState
 
-      -- Possibly modify game state, or use the last one. Check if a key is
-      -- pressed down, and do the state modification.
-      let gameState1 =
-            if | keyMap SDL.ScancodeUp   -> oldGameState { getPaddle2 = paddleUp1 (getPaddle2 oldGameState) }
-               | keyMap SDL.ScancodeDown -> oldGameState { getPaddle2 = paddleDown1 (getPaddle2 oldGameState) }
-               | keyMap SDL.ScancodeRight   -> oldGameState { getPaddle2 = paddleRight1 (getPaddle2 oldGameState) }
-               | keyMap SDL.ScancodeLeft -> oldGameState { getPaddle2 = paddleLeft1 (getPaddle2 oldGameState) }
-               | otherwise -> oldGameState
+      gameState'' <-
+        case getScreen gameState of
+          Quit -> return gameState
+          Menu -> do
+            let gameState1 =
+                  if | keyMap SDL.ScancodeSpace -> gameState { getScreen = Play }
+                     | keyMap SDL.ScancodeQ -> gameState { getScreen = Quit }
+                     | otherwise -> gameState
 
-      let gameState2 =
-            if | keyMap SDL.ScancodeW    -> gameState1 { getPaddle1 = paddleUp1 (getPaddle1 gameState1) }
-               | keyMap SDL.ScancodeS    -> gameState1 { getPaddle1 = paddleDown1 (getPaddle1 gameState1) }
-               | keyMap SDL.ScancodeD    -> gameState1 { getPaddle1 = paddleRight1 (getPaddle1 gameState1) }
-               | keyMap SDL.ScancodeA    -> gameState1 { getPaddle1 = paddleLeft1 (getPaddle1 gameState1) }
-               | otherwise -> gameState1
+            -- Initialize the backbuffer
+            SDL.clear renderer
 
-      -- Update ball position.
-      let gameState3 = gameState2 { getBall = updateBall (getBall gameState2) }
+            -- Draw stuff into buffer
+            SDL.copy renderer textureMenu Nothing Nothing
 
-      -- Check for paddle-ball collisions.
-      let gameState4 = ballWallCollision gameState3
-      let gameState5 = paddleWallCollision gameState4
-      let gameState6 = ballPaddleCollision gameState5
+            -- Flip the buffer and render!
+            SDL.present renderer
 
-      -- Initialize the backbuffer
-      SDL.clear renderer
+            return gameState1
 
-      -- Draw stuff into buffer
-      SDL.copy renderer textureBackground Nothing Nothing
-      SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall gameState6)))
-      SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 gameState6)))
-      SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 gameState6)))
+          Play -> do
+            -- Possibly modify game state, or use the last one. Check if a key is
+            -- pressed down, and do the state modification.
+            let gameState1 =
+                  if | keyMap SDL.ScancodeUp   -> gameState { getPaddle2 = paddleUp1 (getPaddle2 gameState) }
+                     | keyMap SDL.ScancodeDown -> gameState { getPaddle2 = paddleDown1 (getPaddle2 gameState) }
+                     | keyMap SDL.ScancodeRight   -> gameState { getPaddle2 = paddleRight1 (getPaddle2 gameState) }
+                     | keyMap SDL.ScancodeLeft -> gameState { getPaddle2 = paddleLeft1 (getPaddle2 gameState) }
+                     | otherwise -> gameState
 
-      -- Flip the buffer and render!
-      SDL.present renderer
+            let gameState2 =
+                  if | keyMap SDL.ScancodeW    -> gameState1 { getPaddle1 = paddleUp1 (getPaddle1 gameState1) }
+                     | keyMap SDL.ScancodeS    -> gameState1 { getPaddle1 = paddleDown1 (getPaddle1 gameState1) }
+                     | keyMap SDL.ScancodeD    -> gameState1 { getPaddle1 = paddleRight1 (getPaddle1 gameState1) }
+                     | keyMap SDL.ScancodeA    -> gameState1 { getPaddle1 = paddleLeft1 (getPaddle1 gameState1) }
+                     | otherwise -> gameState1
 
-      unless quit (loop gameState6)
+            -- Update ball position.
+            let gameState3 = gameState2 { getBall = updateBall (getBall gameState2) }
+
+            -- Check for paddle-ball collisions.
+            let gameState4 = ballWallCollision gameState3
+            let gameState5 = paddleWallCollision gameState4
+            let gameState6 = ballPaddleCollision gameState5
+
+            -- Initialize the backbuffer
+            SDL.clear renderer
+
+            -- Draw stuff into buffer
+            SDL.copy renderer textureBackground Nothing Nothing
+            SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall gameState6)))
+            SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 gameState6)))
+            SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 gameState6)))
+
+            -- Flip the buffer and render!
+            SDL.present renderer
+            return gameState6
+
+      unless (getScreen gameState'' == Quit) (loop gameState'')
 
   -- Start the main loop.
   loop startingGameState
