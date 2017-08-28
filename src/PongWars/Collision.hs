@@ -49,7 +49,7 @@ checkCollision (AABB m1 (x1, y1) hw1 hh1) (AABB m2 (x2, y2) hw2 hh2) =
            | otherwise -> NotCollided
   in
     if allAxisCollided [xAxisCollided, yAxisCollided]
-      then traceShowId $ findProjectionVector [xAxisCollided, yAxisCollided]
+      then findProjectionVector [xAxisCollided, yAxisCollided]
       else NotCollided
 
 -- | True if all axis has collided, which means a collision happened.

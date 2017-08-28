@@ -206,21 +206,28 @@ ballWallCollision gameState =
                              , getScore1 = getScore1 gameState + score1Incr
                              , getScore2 = getScore2 gameState + score2Incr
                              }
-  in if score1Incr > 0 || score2Incr > 0
-     then traceShowId gameState' -- Force a trace
-     else gameState'
+  in gameState'
 
 paddleWallCollision :: GameState -> GameState
 paddleWallCollision gameState =
-  let topReport = checkCollision wallTop (paddleToObject (getPaddle1 gameState))
-      bottomReport = checkCollision wallBottom (paddleToObject (getPaddle1 gameState))
-      rightReport = checkCollision wallRight (paddleToObject (getPaddle1 gameState))
-      leftReport = checkCollision wallLeft (paddleToObject (getPaddle1 gameState))
-      p11 = updatePaddleStateInCollision topReport (getPaddle1 gameState)
-      p12 = updatePaddleStateInCollision bottomReport p11
-      p13 = updatePaddleStateInCollision rightReport p12
-      p14 = updatePaddleStateInCollision leftReport p13
-  in gameState { getPaddle1 = p14 }
+  let topReport1 = checkCollision wallTop (paddleToObject (getPaddle1 gameState))
+      bottomReport1 = checkCollision wallBottom (paddleToObject (getPaddle1 gameState))
+      rightReport1 = checkCollision wallRight (paddleToObject (getPaddle1 gameState))
+      leftReport1 = checkCollision wallLeft (paddleToObject (getPaddle1 gameState))
+      p11 = updatePaddleStateInCollision topReport1 (getPaddle1 gameState)
+      p12 = updatePaddleStateInCollision bottomReport1 p11
+      p13 = updatePaddleStateInCollision rightReport1 p12
+      p14 = updatePaddleStateInCollision leftReport1 p13
+
+      topReport2 = checkCollision wallTop (paddleToObject (getPaddle2 gameState))
+      bottomReport2 = checkCollision wallBottom (paddleToObject (getPaddle2 gameState))
+      rightReport2 = checkCollision wallRight (paddleToObject (getPaddle2 gameState))
+      leftReport2 = checkCollision wallLeft (paddleToObject (getPaddle2 gameState))
+      p21 = updatePaddleStateInCollision topReport2 (getPaddle2 gameState)
+      p22 = updatePaddleStateInCollision bottomReport2 p21
+      p23 = updatePaddleStateInCollision rightReport2 p22
+      p24 = updatePaddleStateInCollision leftReport2 p23
+  in gameState { getPaddle1 = p14, getPaddle2 = p24 }
 
 updatePaddleStateInCollision :: Report -> Paddle -> Paddle
 updatePaddleStateInCollision report paddle =
@@ -410,6 +417,7 @@ main = do
 
             renderText renderer scoreFont fontColorWhite (400, 0) (T.pack $ show (getFps gameState6) ++ " fps")
             renderText renderer scoreFont fontColorWhite (0, 0) (T.pack $ show (getScore1 gameState6))
+            renderText renderer scoreFont fontColorWhite (750, 0) (T.pack $ show (getScore2 gameState6))
 
             -- Flip the buffer and render!
             SDL.present renderer
