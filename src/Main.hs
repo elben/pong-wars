@@ -66,6 +66,8 @@ data Paddle = Paddle
   { getPaddlePos :: (Float, Float) -- ^ (x, y) coordinates of paddle
   , getPaddleHalfWidth :: Float
   , getPaddleHalfHeight :: Float
+  , getPaddleVelocity :: Float
+  , getPaddleHeading :: Float
   }
   deriving Show
 
@@ -129,6 +131,9 @@ paddleRight1 p = p { getPaddlePos = right1 (getPaddlePos p) }
 paddleLeft1 :: Paddle -> Paddle
 paddleLeft1 p = p { getPaddlePos = left1 (getPaddlePos p) }
 
+paddleVelocity :: Float
+paddleVelocity = 10.0
+
 -- | Normalize heading into the range of [0, 1)
 normalizeHeading :: Float -> Float
 normalizeHeading a =
@@ -144,19 +149,16 @@ updateBall ball =
       a = getBallHeading ball
       x' = x + (v * cos (toRadian a))
       y' = y + (v * sin (toRadian a))
+  in ball { getBallPos = (x', y') }
 
-      -- Check for wall bounces
-      -- a' = if x' <= 0 || x' >= maxWidth
-      --        then 0.5 - a
-      --        else a
-      -- a'' = if y' <= 0
-      --        then 1 - a'
-      --        else if y' >= maxHeight
-      --             then -a'
-      --             else a'
-  in ball { getBallPos = (x', y')
-          -- , getBallHeading = normalizeHeading a''
-          }
+updatePaddle :: Paddle -> Paddle
+updatePaddle paddle =
+  let (x, y) = getPaddlePos paddle
+      v = getPaddleVelocity paddle
+      a = getPaddleHeading paddle
+      x' = x + (v * cos (toRadian a))
+      y' = y + (v * sin (toRadian a))
+  in paddle { getPaddlePos = (x', y') }
 
 -- Flip x axis direction without affecting y axis
 bounceXAxis :: Float -> Float
@@ -339,12 +341,16 @@ main = do
             { getPaddlePos = (20, 300)
             , getPaddleHalfWidth = 10
             , getPaddleHalfHeight = 40
+            , getPaddleVelocity = 0
+            , getPaddleHeading = 0
             }
         , getPaddle2 =
             Paddle
             { getPaddlePos = (780, 300)
             , getPaddleHalfWidth = 10
             , getPaddleHalfHeight = 40
+            , getPaddleVelocity = 0
+            , getPaddleHeading = 0
             }
         , getScore1 = 0
         , getScore2 = 0
@@ -385,39 +391,59 @@ main = do
             -- Possibly modify game state, or use the last one. Check if a key is
             -- pressed down, and do the state modification.
             let gameState1 =
-                  if | keyMap SDL.ScancodeUp   -> gameState { getPaddle2 = paddleUp1 (getPaddle2 gameState) }
-                     | keyMap SDL.ScancodeDown -> gameState { getPaddle2 = paddleDown1 (getPaddle2 gameState) }
-                     | keyMap SDL.ScancodeRight   -> gameState { getPaddle2 = paddleRight1 (getPaddle2 gameState) }
-                     | keyMap SDL.ScancodeLeft -> gameState { getPaddle2 = paddleLeft1 (getPaddle2 gameState) }
-                     | otherwise -> gameState
+                  if | keyMap SDL.ScancodeD && keyMap SDL.ScancodeS ->
+                         gameState { getPaddle1 = (getPaddle1 gameState) { getPaddleVelocity = paddleVelocity, getPaddleHeading = 0.125 } }
+                     | keyMap SDL.ScancodeS && keyMap SDL.ScancodeA ->
+                         gameState { getPaddle1 = (getPaddle1 gameState) { getPaddleVelocity = paddleVelocity, getPaddleHeading = 0.375 } }
+                     | keyMap SDL.ScancodeA && keyMap SDL.ScancodeW ->
+                         gameState { getPaddle1 = (getPaddle1 gameState) { getPaddleVelocity = paddleVelocity, getPaddleHeading = 0.625 } }
+                     | keyMap SDL.ScancodeW && keyMap SDL.ScancodeD ->
+                         gameState { getPaddle1 = (getPaddle1 gameState) { getPaddleVelocity = paddleVelocity, getPaddleHeading = 0.875 } }
+                     | keyMap SDL.ScancodeD -> gameState { getPaddle1 = (getPaddle1 gameState) { getPaddleVelocity = paddleVelocity, getPaddleHeading = 0.0 } }
+                     | keyMap SDL.ScancodeS -> gameState { getPaddle1 = (getPaddle1 gameState) { getPaddleVelocity = paddleVelocity, getPaddleHeading = 0.25 } }
+                     | keyMap SDL.ScancodeA -> gameState { getPaddle1 = (getPaddle1 gameState) { getPaddleVelocity = paddleVelocity, getPaddleHeading = 0.50 } }
+                     | keyMap SDL.ScancodeW -> gameState { getPaddle1 = (getPaddle1 gameState) { getPaddleVelocity = paddleVelocity, getPaddleHeading = 0.75 } }
+                     | otherwise -> gameState { getPaddle1 = (getPaddle1 gameState) { getPaddleVelocity = 0, getPaddleHeading = 0.0 } }
 
             let gameState2 =
-                  if | keyMap SDL.ScancodeW    -> gameState1 { getPaddle1 = paddleUp1 (getPaddle1 gameState1) }
-                     | keyMap SDL.ScancodeS    -> gameState1 { getPaddle1 = paddleDown1 (getPaddle1 gameState1) }
-                     | keyMap SDL.ScancodeD    -> gameState1 { getPaddle1 = paddleRight1 (getPaddle1 gameState1) }
-                     | keyMap SDL.ScancodeA    -> gameState1 { getPaddle1 = paddleLeft1 (getPaddle1 gameState1) }
-                     | otherwise -> gameState1
+                  if | keyMap SDL.ScancodeRight && keyMap SDL.ScancodeDown ->
+                         gameState1 { getPaddle2 = (getPaddle2 gameState1) { getPaddleVelocity = paddleVelocity, getPaddleHeading = 0.125 } }
+                     | keyMap SDL.ScancodeDown && keyMap SDL.ScancodeLeft ->
+                         gameState1 { getPaddle2 = (getPaddle2 gameState1) { getPaddleVelocity = paddleVelocity, getPaddleHeading = 0.375 } }
+                     | keyMap SDL.ScancodeLeft && keyMap SDL.ScancodeUp ->
+                         gameState1 { getPaddle2 = (getPaddle2 gameState1) { getPaddleVelocity = paddleVelocity, getPaddleHeading = 0.625 } }
+                     | keyMap SDL.ScancodeUp && keyMap SDL.ScancodeRight ->
+                         gameState1 { getPaddle2 = (getPaddle2 gameState1) { getPaddleVelocity = paddleVelocity, getPaddleHeading = 0.875 } }
+                     | keyMap SDL.ScancodeRight -> gameState1 { getPaddle2 = (getPaddle2 gameState1) { getPaddleVelocity = paddleVelocity, getPaddleHeading = 0.0 } }
+                     | keyMap SDL.ScancodeDown -> gameState1 { getPaddle2 = (getPaddle2 gameState1) { getPaddleVelocity = paddleVelocity, getPaddleHeading = 0.25 } }
+                     | keyMap SDL.ScancodeLeft -> gameState1 { getPaddle2 = (getPaddle2 gameState1) { getPaddleVelocity = paddleVelocity, getPaddleHeading = 0.50 } }
+                     | keyMap SDL.ScancodeUp   -> gameState1 { getPaddle2 = (getPaddle2 gameState1) { getPaddleVelocity = paddleVelocity, getPaddleHeading = 0.75 } }
+                     | otherwise -> gameState1 { getPaddle2 = (getPaddle2 gameState1) { getPaddleVelocity = 0, getPaddleHeading = 0.0 } }
 
             -- Update ball position.
             let gameState3 = gameState2 { getBall = updateBall (getBall gameState2) }
 
+            -- Update paddle positions.
+            let gameState4 = gameState3 { getPaddle1 = updatePaddle (getPaddle1 gameState3) }
+            let gameState5 = gameState4 { getPaddle2 = updatePaddle (getPaddle2 gameState4) }
+
             -- Check for paddle-ball collisions.
-            let gameState4 = ballWallCollision gameState3
-            let gameState5 = paddleWallCollision gameState4
-            let gameState6 = ballPaddleCollision gameState5
+            let gameState6 = ballWallCollision gameState5
+            let gameState7 = paddleWallCollision gameState6
+            let gameState8 = ballPaddleCollision gameState7
 
             -- Initialize the backbuffer
             SDL.clear renderer
 
             -- Draw stuff into buffer
             SDL.copy renderer textureBackground Nothing Nothing
-            SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall gameState6)))
-            SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 gameState6)))
-            SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 gameState6)))
+            SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall gameState8)))
+            SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 gameState8)))
+            SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 gameState8)))
 
-            renderText renderer scoreFont fontColorWhite (400, 0) (T.pack $ show (getFps gameState6) ++ " fps")
-            renderText renderer scoreFont fontColorWhite (0, 0) (T.pack $ show (getScore1 gameState6))
-            renderText renderer scoreFont fontColorWhite (750, 0) (T.pack $ show (getScore2 gameState6))
+            renderText renderer scoreFont fontColorWhite (400, 0) (T.pack $ show (getFps gameState8) ++ " fps")
+            renderText renderer scoreFont fontColorWhite (0, 0) (T.pack $ show (getScore1 gameState8))
+            renderText renderer scoreFont fontColorWhite (750, 0) (T.pack $ show (getScore2 gameState8))
 
             -- Flip the buffer and render!
             SDL.present renderer
@@ -433,7 +459,7 @@ main = do
             tickEndTime <- Clock.getTime Clock.Monotonic
             let tickDiffNano = Clock.toNanoSecs $ Clock.diffTimeSpec startTime tickEndTime
 
-            return $ gameState6 { getFps = 1000000000 `div` tickDiffNano }
+            return $ gameState8 { getFps = 1000000000 `div` tickDiffNano }
 
       unless (getScreen gameState'' == Quit) (loop gameState'')
 
