@@ -8,6 +8,7 @@ import Data.Maybe
 import qualified Data.Text as T
 import Foreign.C.Types
 import Prelude hiding (any, mapM_)
+import qualified Data.List as L
 import SDL (($=))
 import qualified SDL.Font as Font
 import SDL.Vect
@@ -291,6 +292,46 @@ renderText renderer font color pos text = do
   SDL.copy renderer texture Nothing (Just (Rectangle (P (V2 (toCInt $ fst pos) (toCInt $ snd pos))) (V2 (toCInt w) (toCInt h))))
   SDL.destroyTexture texture
 
+type PaddleKeyMap = [([SDL.Scancode], Paddle -> Paddle)]
+
+keyMapPlayer1 :: PaddleKeyMap
+keyMapPlayer1 = [
+    ([SDL.ScancodeD, SDL.ScancodeS], paddleMove 0.125)
+  , ([SDL.ScancodeS, SDL.ScancodeA], paddleMove 0.375)
+  , ([SDL.ScancodeA, SDL.ScancodeW], paddleMove 0.625)
+  , ([SDL.ScancodeW, SDL.ScancodeD], paddleMove 0.875)
+  , ([SDL.ScancodeD], paddleMove 0.0)
+  , ([SDL.ScancodeS], paddleMove 0.25)
+  , ([SDL.ScancodeA], paddleMove 0.50)
+  , ([SDL.ScancodeW], paddleMove 0.75)
+  ]
+
+keyMapPlayer2 :: PaddleKeyMap
+keyMapPlayer2 = [
+    ([SDL.ScancodeRight, SDL.ScancodeDown], paddleMove 0.125)
+  , ([SDL.ScancodeDown, SDL.ScancodeLeft], paddleMove 0.375)
+  , ([SDL.ScancodeLeft, SDL.ScancodeUp], paddleMove 0.625)
+  , ([SDL.ScancodeUp, SDL.ScancodeRight], paddleMove 0.875)
+  , ([SDL.ScancodeRight], paddleMove 0.0)
+  , ([SDL.ScancodeDown], paddleMove 0.25)
+  , ([SDL.ScancodeLeft], paddleMove 0.50)
+  , ([SDL.ScancodeUp], paddleMove 0.75)
+  ]
+
+-- Possibly modify game state, or use the last one. Check if a key is
+-- pressed down, and do the state modification.
+movePaddleState ::
+  PaddleKeyMap ->
+  (SDL.Scancode -> Bool) -> -- ^ From SDL.getKeyboardState
+  Paddle -> -- ^ Current paddle state
+  Paddle    -- ^ Returns new paddle state
+movePaddleState paddleKeyMap keyMap paddle =
+  -- Find the first element where all the required keys are hit; use that as the
+  -- movement for this paddle.
+  case L.find (\(keys, _) -> L.all keyMap keys) paddleKeyMap of
+    Just (_, movement) -> movement paddle
+    Nothing -> paddleStop paddle
+
 main :: IO ()
 main = do
   SDL.initialize [SDL.InitVideo]
@@ -396,35 +437,8 @@ main = do
           Play -> do
             -- Possibly modify game state, or use the last one. Check if a key is
             -- pressed down, and do the state modification.
-            let gameState1 =
-                  if | keyMap SDL.ScancodeD && keyMap SDL.ScancodeS ->
-                         gameState { getPaddle1 = paddleMove 0.125 (getPaddle1 gameState) }
-                     | keyMap SDL.ScancodeS && keyMap SDL.ScancodeA ->
-                         gameState { getPaddle1 = paddleMove 0.375 (getPaddle1 gameState) }
-                     | keyMap SDL.ScancodeA && keyMap SDL.ScancodeW ->
-                         gameState { getPaddle1 = paddleMove 0.625 (getPaddle1 gameState) }
-                     | keyMap SDL.ScancodeW && keyMap SDL.ScancodeD ->
-                         gameState { getPaddle1 = paddleMove 0.875 (getPaddle1 gameState) }
-                     | keyMap SDL.ScancodeD -> gameState { getPaddle1 = paddleMove 0.0 (getPaddle1 gameState) }
-                     | keyMap SDL.ScancodeS -> gameState { getPaddle1 = paddleMove 0.25 (getPaddle1 gameState) }
-                     | keyMap SDL.ScancodeA -> gameState { getPaddle1 = paddleMove 0.50 (getPaddle1 gameState) }
-                     | keyMap SDL.ScancodeW -> gameState { getPaddle1 = paddleMove 0.75 (getPaddle1 gameState) }
-                     | otherwise -> gameState { getPaddle1 = paddleStop (getPaddle1 gameState) }
-
-            let gameState2 =
-                  if | keyMap SDL.ScancodeRight && keyMap SDL.ScancodeDown ->
-                         gameState1 { getPaddle2 = paddleMove 0.125 (getPaddle2 gameState1) }
-                     | keyMap SDL.ScancodeDown && keyMap SDL.ScancodeLeft ->
-                         gameState1 { getPaddle2 = paddleMove 0.375 (getPaddle2 gameState1) }
-                     | keyMap SDL.ScancodeLeft && keyMap SDL.ScancodeUp ->
-                         gameState1 { getPaddle2 = paddleMove 0.625 (getPaddle2 gameState1) }
-                     | keyMap SDL.ScancodeUp && keyMap SDL.ScancodeRight ->
-                         gameState1 { getPaddle2 = paddleMove 0.875 (getPaddle2 gameState1) }
-                     | keyMap SDL.ScancodeRight -> gameState1 { getPaddle2 = paddleMove 0.0 (getPaddle2 gameState1) }
-                     | keyMap SDL.ScancodeDown -> gameState1 { getPaddle2 = paddleMove 0.25 (getPaddle2 gameState1) }
-                     | keyMap SDL.ScancodeLeft -> gameState1 { getPaddle2 = paddleMove 0.50 (getPaddle2 gameState1) }
-                     | keyMap SDL.ScancodeUp   -> gameState1 { getPaddle2 = paddleMove 0.75 (getPaddle2 gameState1) }
-                     | otherwise -> gameState1 { getPaddle2 = paddleStop (getPaddle2 gameState1) }
+            let gameState1 = gameState { getPaddle1 = movePaddleState keyMapPlayer1 keyMap (getPaddle1 gameState)}
+            let gameState2 = gameState1 { getPaddle2 = movePaddleState keyMapPlayer2 keyMap (getPaddle2 gameState1)}
 
             -- Update ball position.
             let gameState3 = gameState2 { getBall = updateBall (getBall gameState2) }
