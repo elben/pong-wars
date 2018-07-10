@@ -11,15 +11,15 @@ type Mass = Int
 data Object =
   -- Axis-aligned bounding box.
   AABB Mass
-       (Float, Float) -- (x, y) position
-       Float          -- Half-width
-       Float          -- Half-height
+       (Double, Double) -- (x, y) position
+       Double          -- Half-width
+       Double          -- Half-height
 
 data Report
   = NotCollided
-  | Collided Float -- Projection vector angle of collision points _into_ the
+  | Collided Double -- Projection vector angle of collision points _into_ the
                    -- collision.
-             Float -- Projection vector length
+             Double -- Projection vector length
   deriving (Eq, Show)
 
 checkCollision :: Object -> Object -> Report

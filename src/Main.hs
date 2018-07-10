@@ -23,9 +23,9 @@ import PongWars.Collision
 
 import Paths_pong_wars (getDataFileName)
 
-maxWidth :: Float
+maxWidth :: Double
 maxWidth = 800
-maxHeight :: Float
+maxHeight :: Double
 maxHeight = 600
 
 screenWidth, screenHeight :: CInt
@@ -57,6 +57,7 @@ data GameState = GameState
   , getPaddle2 :: Paddle
   , getScore1 :: Int
   , getScore2 :: Int
+  , getTimeRemainingSecs :: Double
   , getFps :: Integer
   }
   deriving (Show)
@@ -64,20 +65,20 @@ data GameState = GameState
 -- A Paddle state consist of its position, which represents the center of the
 -- paddle, and the half-width/height dimensions.
 data Paddle = Paddle
-  { getPaddlePos :: (Float, Float) -- ^ (x, y) coordinates of paddle
-  , getPaddleHalfWidth :: Float
-  , getPaddleHalfHeight :: Float
-  , getPaddleVelocity :: Float
-  , getPaddleHeading :: Float
+  { getPaddlePos :: (Double, Double) -- ^ (x, y) coordinates of paddle
+  , getPaddleHalfWidth :: Double
+  , getPaddleHalfHeight :: Double
+  , getPaddleVelocity :: Double
+  , getPaddleHeading :: Double
   }
   deriving Show
 
 data Ball = Ball
-  { getBallPos :: (Float, Float) -- ^ (x, y) coordinates of center of ball
-  , getBallRadius :: Float      -- ^ Radius, in pixels
-  , getBallVelocity :: Float      -- ^ Velocity, in pixels/tick.
-  , getBallHeading :: Float     -- ^ Degree of direction, where 0 is to the right, counter-clockwise.
-  , getBallSpinVelocity :: Float  -- ^ Amount of velocity pushing perpendicular of heading, in pixels/tick.
+  { getBallPos :: (Double, Double) -- ^ (x, y) coordinates of center of ball
+  , getBallRadius :: Double      -- ^ Radius, in pixels
+  , getBallVelocity :: Double      -- ^ Velocity, in pixels/tick.
+  , getBallHeading :: Double     -- ^ Degree of direction, where 0 is to the right, counter-clockwise.
+  , getBallSpinVelocity :: Double  -- ^ Amount of velocity pushing perpendicular of heading, in pixels/tick.
   }
   deriving Show
 
@@ -108,16 +109,16 @@ wallLeft = AABB massWall (-50, maxHeight / 2) 50 (maxHeight / 2 + 1)
 wallRight :: Object
 wallRight = AABB massWall (maxWidth + 50, maxHeight / 2) 50 (maxHeight / 2 + 1)
 
-up1 :: (Float, Float) -> (Float, Float)
+up1 :: (Double, Double) -> (Double, Double)
 up1 (x, y) = (x, y - 10)
 
-down1 :: (Float, Float) -> (Float, Float)
+down1 :: (Double, Double) -> (Double, Double)
 down1 (x, y) = (x, y + 10)
 
-right1 :: (Float, Float) -> (Float, Float)
+right1 :: (Double, Double) -> (Double, Double)
 right1 (x, y) = (x + 10, y)
 
-left1 :: (Float, Float) -> (Float, Float)
+left1 :: (Double, Double) -> (Double, Double)
 left1 (x, y) = (x - 10, y)
 
 paddleUp1 :: Paddle -> Paddle
@@ -132,13 +133,13 @@ paddleRight1 p = p { getPaddlePos = right1 (getPaddlePos p) }
 paddleLeft1 :: Paddle -> Paddle
 paddleLeft1 p = p { getPaddlePos = left1 (getPaddlePos p) }
 
-paddleVelocity :: Float
+paddleVelocity :: Double
 paddleVelocity = 10.0
 
 -- | Normalize heading into the range of [0, 1)
-normalizeHeading :: Float -> Float
+normalizeHeading :: Double -> Double
 normalizeHeading a =
-  let a' = snd (properFraction a :: (Integer, Float))
+  let a' = snd (properFraction a :: (Integer, Double))
   in if a' < 0
      then a' + 1
      else a'
@@ -161,27 +162,27 @@ updatePaddle paddle =
       y' = y + (v * sin (toRadian a))
   in paddle { getPaddlePos = (x', y') }
 
-paddleMove :: Float -> Paddle -> Paddle
+paddleMove :: Double -> Paddle -> Paddle
 paddleMove a p = p { getPaddleVelocity = paddleVelocity, getPaddleHeading = a }
 
 paddleStop :: Paddle -> Paddle
 paddleStop p = p { getPaddleVelocity = 0, getPaddleHeading = 0.0 }
 
 -- Flip x axis direction without affecting y axis
-bounceXAxis :: Float -> Float
+bounceXAxis :: Double -> Double
 bounceXAxis a = normalizeHeading (0.5 - a)
 
 -- Flip y axis direction without affecting x axis
-bounceYAxis :: Float -> Float
+bounceYAxis :: Double -> Double
 bounceYAxis a =
   if a > 0 && a <= 0.5
   then normalizeHeading (1 - a)
   else normalizeHeading (-a)
 
-toRadian :: Float -> Float
+toRadian :: Double -> Double
 toRadian a = 2 * pi * a
 
-toPV2 :: (Float, Float) -> Point V2 CInt
+toPV2 :: (Double, Double) -> Point V2 CInt
 toPV2 (x, y) = P $ V2 (round x) (round y)
 
 toRectBall :: Ball -> Rectangle CInt
@@ -248,9 +249,9 @@ updatePaddleStateInCollision report paddle =
        in paddle { getPaddlePos = (x + (d * cos (toRadian a)), y + (d * sin (toRadian a))) }
 
 -- | Change direction if needed, given the projection vector heading.
-changeDirection :: Float -- Current heading
-                -> Float -- Projection vector heading
-                -> Float -- New heading
+changeDirection :: Double -- Current heading
+                -> Double -- Projection vector heading
+                -> Double -- New heading
 changeDirection a pvh =
   let a' = if | pvh == 0.0 -> if a <= 0.25 || a >= 0.75 then a else bounceXAxis a
               | pvh == 0.5 -> if a >= 0.25 && a <= 0.75 then a else bounceXAxis a
@@ -296,25 +297,25 @@ type PaddleKeyMap = [([SDL.Scancode], Paddle -> Paddle)]
 
 keyMapPlayer1 :: PaddleKeyMap
 keyMapPlayer1 = [
-    ([SDL.ScancodeD, SDL.ScancodeS], paddleMove 0.125)
-  , ([SDL.ScancodeS, SDL.ScancodeA], paddleMove 0.375)
-  , ([SDL.ScancodeA, SDL.ScancodeW], paddleMove 0.625)
-  , ([SDL.ScancodeW, SDL.ScancodeD], paddleMove 0.875)
-  , ([SDL.ScancodeD], paddleMove 0.0)
-  , ([SDL.ScancodeS], paddleMove 0.25)
-  , ([SDL.ScancodeA], paddleMove 0.50)
+    -- ([SDL.ScancodeD, SDL.ScancodeS], paddleMove 0.125)
+  -- , ([SDL.ScancodeS, SDL.ScancodeA], paddleMove 0.375)
+  -- , ([SDL.ScancodeA, SDL.ScancodeW], paddleMove 0.625)
+  -- , ([SDL.ScancodeW, SDL.ScancodeD], paddleMove 0.875)
+  -- , ([SDL.ScancodeD], paddleMove 0.0)
+    ([SDL.ScancodeS], paddleMove 0.25)
+  -- , ([SDL.ScancodeA], paddleMove 0.50)
   , ([SDL.ScancodeW], paddleMove 0.75)
   ]
 
 keyMapPlayer2 :: PaddleKeyMap
 keyMapPlayer2 = [
-    ([SDL.ScancodeRight, SDL.ScancodeDown], paddleMove 0.125)
-  , ([SDL.ScancodeDown, SDL.ScancodeLeft], paddleMove 0.375)
-  , ([SDL.ScancodeLeft, SDL.ScancodeUp], paddleMove 0.625)
-  , ([SDL.ScancodeUp, SDL.ScancodeRight], paddleMove 0.875)
-  , ([SDL.ScancodeRight], paddleMove 0.0)
-  , ([SDL.ScancodeDown], paddleMove 0.25)
-  , ([SDL.ScancodeLeft], paddleMove 0.50)
+    -- ([SDL.ScancodeRight, SDL.ScancodeDown], paddleMove 0.125)
+  -- , ([SDL.ScancodeDown, SDL.ScancodeLeft], paddleMove 0.375)
+  -- , ([SDL.ScancodeLeft, SDL.ScancodeUp], paddleMove 0.625)
+  -- , ([SDL.ScancodeUp, SDL.ScancodeRight], paddleMove 0.875)
+  -- , ([SDL.ScancodeRight], paddleMove 0.0)
+    ([SDL.ScancodeDown], paddleMove 0.25)
+  -- , ([SDL.ScancodeLeft], paddleMove 0.50)
   , ([SDL.ScancodeUp], paddleMove 0.75)
   ]
 
@@ -371,7 +372,7 @@ main = do
             Ball
             { getBallPos = (100, 100)
             , getBallRadius = 10
-            , getBallVelocity = 5
+            , getBallVelocity = 7
 
             -- Heading, number from 0 to 1. 0 should be the vector
             -- pointing to the right, 0.25 points down (clockwise, because
@@ -401,11 +402,14 @@ main = do
             }
         , getScore1 = 0
         , getScore2 = 0
+        , getTimeRemainingSecs = 60
         , getFps = 0
        }
 
+    gameStartTime = Clock.getTime Clock.Monotonic
+
     loop oldGameState = do
-      startTime <- Clock.getTime Clock.Monotonic
+      loopStartTime <- Clock.getTime Clock.Monotonic
 
       -- Get all buffered keyboard events
       events <- map SDL.eventPayload <$> SDL.pollEvents
@@ -461,6 +465,7 @@ main = do
             SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 gameState8)))
             SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 gameState8)))
 
+            renderText renderer scoreFont fontColorWhite (200, 0) (T.pack $ show (floor (getTimeRemainingSecs gameState8)) ++ " seconds")
             renderText renderer scoreFont fontColorWhite (400, 0) (T.pack $ show (getFps gameState8) ++ " fps")
             renderText renderer scoreFont fontColorWhite (0, 0) (T.pack $ show (getScore1 gameState8))
             renderText renderer scoreFont fontColorWhite (750, 0) (T.pack $ show (getScore2 gameState8))
@@ -469,17 +474,20 @@ main = do
             SDL.present renderer
 
             -- Attempt to tick at 60 FPS
-            endTime <- Clock.getTime Clock.Monotonic
-            let diffNano = Clock.toNanoSecs $ Clock.diffTimeSpec startTime endTime
-            if diffNano < 16666666
-              then nanosleep (16666666 - diffNano) -- Above 60 FPS
-              else return () -- Slower than 60 FPS
+            loopEndTime <- Clock.getTime Clock.Monotonic
+            let diffNano = Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime loopEndTime
+
+            -- Sleep when above 60 FPS
+            when (diffNano < 16666666) (nanosleep (16666666 - diffNano))
+
+            -- Shot clock ticks down
+            let gameDurationSeconds = getTimeRemainingSecs gameState8 - (fromIntegral diffNano / 100000000)
 
             -- Time *after* a potential sleep.
             tickEndTime <- Clock.getTime Clock.Monotonic
-            let tickDiffNano = Clock.toNanoSecs $ Clock.diffTimeSpec startTime tickEndTime
+            let tickDiffNano = Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime tickEndTime
 
-            return $ gameState8 { getFps = 1000000000 `div` tickDiffNano }
+            return $ gameState8 { getFps = 1000000000 `div` tickDiffNano, getTimeRemainingSecs = gameDurationSeconds }
 
       unless (getScreen gameState'' == Quit) (loop gameState'')
 
