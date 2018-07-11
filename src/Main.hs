@@ -21,10 +21,6 @@ import Debug.Trace
 
 import PongWars.Collision
 
--- Cabal auto-generates this module. getDataFileName is so that we can access
--- data files that we're bundling with the cabal build.
---
--- https://www.haskell.org/cabal/release/cabal-1.10.1.0/doc/users-guide/
 import Paths_pong_wars (getDataFileName)
 
 maxWidth :: Double
