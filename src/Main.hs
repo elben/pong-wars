@@ -50,6 +50,12 @@ loadTexture r filePath = do
 data Screen = Menu | Play | Quit
   deriving (Show, Eq)
 
+type DeltaTime = Double
+
+-- In terms of seconds
+dt :: DeltaTime
+dt = 0.001
+
 data GameState = GameState
   { getScreen :: Screen
   , getBall :: Ball
@@ -59,6 +65,7 @@ data GameState = GameState
   , getScore2 :: Int
   , getTimeRemainingSecs :: Double
   , getFps :: Integer
+  , getAccumulatedTimeSecs :: Double
   }
   deriving (Show)
 
@@ -134,7 +141,7 @@ paddleLeft1 :: Paddle -> Paddle
 paddleLeft1 p = p { getPaddlePos = left1 (getPaddlePos p) }
 
 paddleVelocity :: Double
-paddleVelocity = 10.0
+paddleVelocity = 600.0
 
 -- | Normalize heading into the range of [0, 1)
 normalizeHeading :: Double -> Double
@@ -149,8 +156,8 @@ updateBall ball =
   let (x, y) = getBallPos ball
       v = getBallVelocity ball
       a = getBallHeading ball
-      x' = x + (v * cos (toRadian a))
-      y' = y + (v * sin (toRadian a))
+      x' = x + (v * cos (toRadian a)) * dt
+      y' = y + (v * sin (toRadian a)) * dt
   in ball { getBallPos = (x', y') }
 
 updatePaddle :: Paddle -> Paddle
@@ -158,8 +165,8 @@ updatePaddle paddle =
   let (x, y) = getPaddlePos paddle
       v = getPaddleVelocity paddle
       a = getPaddleHeading paddle
-      x' = x + (v * cos (toRadian a))
-      y' = y + (v * sin (toRadian a))
+      x' = x + (v * cos (toRadian a)) * dt
+      y' = y + (v * sin (toRadian a)) * dt
   in paddle { getPaddlePos = (x', y') }
 
 paddleMove :: Double -> Paddle -> Paddle
@@ -333,6 +340,45 @@ movePaddleState paddleKeyMap keyMap paddle =
     Just (_, movement) -> movement paddle
     Nothing -> paddleStop paddle
 
+
+-- The render (below) "produces" time, and the simulation "consumes"
+-- time. Keep on looping until the simulation has consumed all (with
+    -- a remainder) of the accumulated time between renders.
+--
+-- So if the FPS is HIGHER than simulation time dt, then we only
+-- simulation once for a couple of frames. But if FPS is lower than
+-- simulation time dt, we simulation multiple times per frame.
+--
+-- https://gafferongames.com/post/fix_your_timestep/
+simulationLoop :: (SDL.Scancode -> Bool) -- ^ From SDL.getKeyboardState
+               -> GameState
+               -> GameState
+simulationLoop keyMap gameState =
+  if getAccumulatedTimeSecs gameState >= dt
+  then
+    -- Possibly modify game state, or use the last one. Check if a key is
+    -- pressed down, and do the state modification.
+    let gameState1 = gameState { getPaddle1 = movePaddleState keyMapPlayer1 keyMap (getPaddle1 gameState)}
+        gameState2 = gameState1 { getPaddle2 = movePaddleState keyMapPlayer2 keyMap (getPaddle2 gameState1)}
+
+    -- Update ball position.
+        gameState3 = gameState2 { getBall = updateBall (getBall gameState2) }
+
+    -- Update paddle positions.
+        gameState4 = gameState3 { getPaddle1 = updatePaddle (getPaddle1 gameState3) }
+        gameState5 = gameState4 { getPaddle2 = updatePaddle (getPaddle2 gameState4) }
+
+    -- Check for paddle-ball collisions.
+        gameState6 = ballWallCollision gameState5
+        gameState7 = paddleWallCollision gameState6
+        gameState8 = ballPaddleCollision gameState7
+
+        gameState9 = gameState8 { getAccumulatedTimeSecs = getAccumulatedTimeSecs gameState8 - dt }
+
+    in simulationLoop keyMap gameState9
+  else gameState
+
+
 main :: IO ()
 main = do
   SDL.initialize [SDL.InitVideo]
@@ -372,7 +418,7 @@ main = do
             Ball
             { getBallPos = (100, 100)
             , getBallRadius = 10
-            , getBallVelocity = 7
+            , getBallVelocity = 500
 
             -- Heading, number from 0 to 1. 0 should be the vector
             -- pointing to the right, 0.25 points down (clockwise, because
@@ -404,13 +450,10 @@ main = do
         , getScore2 = 0
         , getTimeRemainingSecs = 60
         , getFps = 0
+        , getAccumulatedTimeSecs = 0.0
        }
 
-    gameStartTime = Clock.getTime Clock.Monotonic
-
     loop oldGameState = do
-      loopStartTime <- Clock.getTime Clock.Monotonic
-
       -- Get all buffered keyboard events
       events <- map SDL.eventPayload <$> SDL.pollEvents
       let gameState = oldGameState { getScreen = if SDL.QuitEvent `elem` events then Quit else getScreen oldGameState }
@@ -439,55 +482,40 @@ main = do
             return gameState1
 
           Play -> do
-            -- Possibly modify game state, or use the last one. Check if a key is
-            -- pressed down, and do the state modification.
-            let gameState1 = gameState { getPaddle1 = movePaddleState keyMapPlayer1 keyMap (getPaddle1 gameState)}
-            let gameState2 = gameState1 { getPaddle2 = movePaddleState keyMapPlayer2 keyMap (getPaddle2 gameState1)}
+            loopStartTime <- Clock.getTime Clock.Monotonic
 
-            -- Update ball position.
-            let gameState3 = gameState2 { getBall = updateBall (getBall gameState2) }
-
-            -- Update paddle positions.
-            let gameState4 = gameState3 { getPaddle1 = updatePaddle (getPaddle1 gameState3) }
-            let gameState5 = gameState4 { getPaddle2 = updatePaddle (getPaddle2 gameState4) }
-
-            -- Check for paddle-ball collisions.
-            let gameState6 = ballWallCollision gameState5
-            let gameState7 = paddleWallCollision gameState6
-            let gameState8 = ballPaddleCollision gameState7
+            let gameState = simulationLoop keyMap oldGameState
 
             -- Initialize the backbuffer
             SDL.clear renderer
 
             -- Draw stuff into buffer
             SDL.copy renderer textureBackground Nothing Nothing
-            SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall gameState8)))
-            SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 gameState8)))
-            SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 gameState8)))
+            SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall gameState)))
+            SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 gameState)))
+            SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 gameState)))
 
-            renderText renderer scoreFont fontColorWhite (200, 0) (T.pack $ show (floor (getTimeRemainingSecs gameState8)) ++ " seconds")
-            renderText renderer scoreFont fontColorWhite (400, 0) (T.pack $ show (getFps gameState8) ++ " fps")
-            renderText renderer scoreFont fontColorWhite (0, 0) (T.pack $ show (getScore1 gameState8))
-            renderText renderer scoreFont fontColorWhite (750, 0) (T.pack $ show (getScore2 gameState8))
+            renderText renderer scoreFont fontColorWhite (200, 0) (T.pack $ show (floor (getTimeRemainingSecs gameState)) ++ " seconds")
+            renderText renderer scoreFont fontColorWhite (400, 0) (T.pack $ show (getFps gameState) ++ " fps")
+            renderText renderer scoreFont fontColorWhite (0, 0) (T.pack $ show (getScore1 gameState))
+            renderText renderer scoreFont fontColorWhite (750, 0) (T.pack $ show (getScore2 gameState))
 
             -- Flip the buffer and render!
             SDL.present renderer
 
-            -- Attempt to tick at 60 FPS
             loopEndTime <- Clock.getTime Clock.Monotonic
             let diffNano = Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime loopEndTime
 
-            -- Sleep when above 60 FPS
-            when (diffNano < 16666666) (nanosleep (16666666 - diffNano))
-
             -- Shot clock ticks down
-            let gameDurationSeconds = getTimeRemainingSecs gameState8 - (fromIntegral diffNano / 100000000)
+            let gameDurationSeconds = getTimeRemainingSecs gameState - (fromIntegral diffNano / 1000000000)
 
             -- Time *after* a potential sleep.
             tickEndTime <- Clock.getTime Clock.Monotonic
             let tickDiffNano = Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime tickEndTime
 
-            return $ gameState8 { getFps = 1000000000 `div` tickDiffNano, getTimeRemainingSecs = gameDurationSeconds }
+            return $ gameState { getFps = 1000000000 `div` tickDiffNano
+                               , getTimeRemainingSecs = gameDurationSeconds
+                               , getAccumulatedTimeSecs = getAccumulatedTimeSecs gameState + (fromIntegral diffNano / 1000000000) }
 
       unless (getScreen gameState'' == Quit) (loop gameState'')
 
