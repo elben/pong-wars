@@ -2,8 +2,6 @@
 
 module PongWars.Collision where
 
-import Debug.Trace
-
 -- | Mass of an Object. When two objects collide, the projection vector is set
 -- for the object with less mass.
 type Mass = Int

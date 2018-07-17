@@ -15,9 +15,6 @@ import SDL.Vect
 import SDL.Video.Renderer
 import qualified SDL
 import qualified System.Clock as Clock
-import System.Posix.Unistd (nanosleep)
-
-import Debug.Trace
 
 import PongWars.Collision
 
@@ -115,30 +112,6 @@ wallLeft = AABB massWall (-50, maxHeight / 2) 50 (maxHeight / 2 + 1)
 
 wallRight :: Object
 wallRight = AABB massWall (maxWidth + 50, maxHeight / 2) 50 (maxHeight / 2 + 1)
-
-up1 :: (Double, Double) -> (Double, Double)
-up1 (x, y) = (x, y - 10)
-
-down1 :: (Double, Double) -> (Double, Double)
-down1 (x, y) = (x, y + 10)
-
-right1 :: (Double, Double) -> (Double, Double)
-right1 (x, y) = (x + 10, y)
-
-left1 :: (Double, Double) -> (Double, Double)
-left1 (x, y) = (x - 10, y)
-
-paddleUp1 :: Paddle -> Paddle
-paddleUp1 p = p { getPaddlePos = up1 (getPaddlePos p) }
-
-paddleDown1 :: Paddle -> Paddle
-paddleDown1 p = p { getPaddlePos = down1 (getPaddlePos p) }
-
-paddleRight1 :: Paddle -> Paddle
-paddleRight1 p = p { getPaddlePos = right1 (getPaddlePos p) }
-
-paddleLeft1 :: Paddle -> Paddle
-paddleLeft1 p = p { getPaddlePos = left1 (getPaddlePos p) }
 
 paddleVelocity :: Double
 paddleVelocity = 600.0
@@ -484,21 +457,21 @@ main = do
           Play -> do
             loopStartTime <- Clock.getTime Clock.Monotonic
 
-            let gameState = simulationLoop keyMap oldGameState
+            let simulatedGameState = simulationLoop keyMap oldGameState
 
             -- Initialize the backbuffer
             SDL.clear renderer
 
             -- Draw stuff into buffer
             SDL.copy renderer textureBackground Nothing Nothing
-            SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall gameState)))
-            SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 gameState)))
-            SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 gameState)))
+            SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall simulatedGameState)))
+            SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 simulatedGameState)))
+            SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 simulatedGameState)))
 
-            renderText renderer scoreFont fontColorWhite (200, 0) (T.pack $ show (floor (getTimeRemainingSecs gameState)) ++ " seconds")
-            renderText renderer scoreFont fontColorWhite (400, 0) (T.pack $ show (getFps gameState) ++ " fps")
-            renderText renderer scoreFont fontColorWhite (0, 0) (T.pack $ show (getScore1 gameState))
-            renderText renderer scoreFont fontColorWhite (750, 0) (T.pack $ show (getScore2 gameState))
+            renderText renderer scoreFont fontColorWhite (200, 0) (T.pack $ show (floor (getTimeRemainingSecs simulatedGameState)) ++ " seconds")
+            renderText renderer scoreFont fontColorWhite (400, 0) (T.pack $ show (getFps simulatedGameState) ++ " fps")
+            renderText renderer scoreFont fontColorWhite (0, 0) (T.pack $ show (getScore1 simulatedGameState))
+            renderText renderer scoreFont fontColorWhite (750, 0) (T.pack $ show (getScore2 simulatedGameState))
 
             -- Flip the buffer and render!
             SDL.present renderer
@@ -507,15 +480,16 @@ main = do
             let diffNano = Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime loopEndTime
 
             -- Shot clock ticks down
-            let gameDurationSeconds = getTimeRemainingSecs gameState - (fromIntegral diffNano / 1000000000)
+            let gameDurationSeconds = getTimeRemainingSecs simulatedGameState - (fromIntegral diffNano / 1000000000)
 
             -- Time *after* a potential sleep.
             tickEndTime <- Clock.getTime Clock.Monotonic
             let tickDiffNano = Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime tickEndTime
 
-            return $ gameState { getFps = 1000000000 `div` tickDiffNano
-                               , getTimeRemainingSecs = gameDurationSeconds
-                               , getAccumulatedTimeSecs = getAccumulatedTimeSecs gameState + (fromIntegral diffNano / 1000000000) }
+            return $
+              simulatedGameState { getFps = 1000000000 `div` tickDiffNano
+                                 , getTimeRemainingSecs = gameDurationSeconds
+                                 , getAccumulatedTimeSecs = getAccumulatedTimeSecs simulatedGameState + (fromIntegral diffNano / 1000000000) }
 
       unless (getScreen gameState'' == Quit) (loop gameState'')
 
