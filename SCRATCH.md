@@ -1,3 +1,8 @@
+Color scheme:
+- http://www.colourlovers.com/palette/1406402/Tron_Legacy_2
+
+Font:
+- https://medialoot.com/item/neon-tubes-font/
 
 Stuttering problem:
 - prob due to the unstable FPS?

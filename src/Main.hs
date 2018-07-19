@@ -277,25 +277,13 @@ type PaddleKeyMap = [([SDL.Scancode], Paddle -> Paddle)]
 
 keyMapPlayer1 :: PaddleKeyMap
 keyMapPlayer1 = [
-    -- ([SDL.ScancodeD, SDL.ScancodeS], paddleMove 0.125)
-  -- , ([SDL.ScancodeS, SDL.ScancodeA], paddleMove 0.375)
-  -- , ([SDL.ScancodeA, SDL.ScancodeW], paddleMove 0.625)
-  -- , ([SDL.ScancodeW, SDL.ScancodeD], paddleMove 0.875)
-  -- , ([SDL.ScancodeD], paddleMove 0.0)
     ([SDL.ScancodeS], paddleMove 0.25)
-  -- , ([SDL.ScancodeA], paddleMove 0.50)
   , ([SDL.ScancodeW], paddleMove 0.75)
   ]
 
 keyMapPlayer2 :: PaddleKeyMap
 keyMapPlayer2 = [
-    -- ([SDL.ScancodeRight, SDL.ScancodeDown], paddleMove 0.125)
-  -- , ([SDL.ScancodeDown, SDL.ScancodeLeft], paddleMove 0.375)
-  -- , ([SDL.ScancodeLeft, SDL.ScancodeUp], paddleMove 0.625)
-  -- , ([SDL.ScancodeUp, SDL.ScancodeRight], paddleMove 0.875)
-  -- , ([SDL.ScancodeRight], paddleMove 0.0)
     ([SDL.ScancodeDown], paddleMove 0.25)
-  -- , ([SDL.ScancodeLeft], paddleMove 0.50)
   , ([SDL.ScancodeUp], paddleMove 0.75)
   ]
 
@@ -364,7 +352,7 @@ main = do
      when (renderQuality /= SDL.ScaleLinear) $
        putStrLn "Warning: Linear texture filtering not enabled!"
 
-  window <- SDL.createWindow "SDL Tutorial"
+  window <- SDL.createWindow "Pong Wars"
     SDL.defaultWindow { SDL.windowInitialSize = V2 screenWidth screenHeight }
   SDL.showWindow window
 
@@ -377,7 +365,7 @@ main = do
   textureMenu <- loadTexture renderer "resources/images/menu.bmp"
   textureBackground <- loadTexture renderer "resources/images/background.bmp"
   textureBall <- loadTexture renderer "resources/images/ball.bmp"
-  texturePaddle <- loadTexture renderer "resources/images/paddle.bmp"
+  texturePaddle <- loadTexture renderer "resources/images/paddle_blue.bmp"
 
   scoreFont <- do
     fp <- getDataFileName "resources/fonts/overpass/overpass-bold.otf"
