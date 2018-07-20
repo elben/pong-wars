@@ -4,6 +4,7 @@
 module Main (main) where
 
 import Control.Monad hiding (mapM_)
+import Control.Concurrent (threadDelay)
 import Data.Maybe
 import qualified Data.Text as T
 import Foreign.C.Types
@@ -44,7 +45,7 @@ loadTexture r filePath = do
   SDL.freeSurface surface
   return t
 
-data Screen = Menu | Play | Quit
+data Screen = Menu | Play | Quit | Winner
   deriving (Show, Eq)
 
 type DeltaTime = Double
@@ -339,6 +340,20 @@ simulationLoop keyMap gameState =
     in simulationLoop keyMap gameState9
   else gameState
 
+-- Make game end when game clock hits 0.
+-- If tied, sudden death mode.
+
+renderAndFlip :: Renderer -> IO () -> IO ()
+renderAndFlip renderer f = do
+  -- Initialize the backbuffer
+  SDL.clear renderer
+
+  -- Draw stuff into buffer
+  f
+
+  -- Flip the buffer and render!
+  SDL.present renderer
+
 
 main :: IO ()
 main = do
@@ -409,7 +424,7 @@ main = do
             }
         , getScore1 = 0
         , getScore2 = 0
-        , getTimeRemainingSecs = 60
+        , getTimeRemainingSecs = 5
         , getFps = 0
         , getAccumulatedTimeSecs = 0.0
        }
@@ -427,18 +442,32 @@ main = do
           Quit -> return gameState
           Menu -> do
             let gameState1 =
-                  if | keyMap SDL.ScancodeSpace -> gameState { getScreen = Play }
+                  if | keyMap SDL.ScancodeSpace -> startingGameState { getScreen = Play }
                      | keyMap SDL.ScancodeQ -> gameState { getScreen = Quit }
                      | otherwise -> gameState
 
-            -- Initialize the backbuffer
-            SDL.clear renderer
+            renderAndFlip renderer $
+              SDL.copy renderer textureMenu Nothing Nothing
 
-            -- Draw stuff into buffer
-            SDL.copy renderer textureMenu Nothing Nothing
+            return gameState1
 
-            -- Flip the buffer and render!
-            SDL.present renderer
+          Winner -> do
+            renderAndFlip renderer $ do
+              renderText renderer scoreFont fontColorWhite (200, 0) "Congrats winner!"
+              renderText renderer scoreFont fontColorWhite (200, 300) "Press [space] to reset, or [q] to quit."
+              renderText renderer scoreFont fontColorWhite (0, 0) (T.pack $ show (getScore1 gameState))
+              renderText renderer scoreFont fontColorWhite (750, 0) (T.pack $ show (getScore2 gameState))
+
+            let gameState1 =
+                  if | keyMap SDL.ScancodeSpace -> startingGameState { getScreen = Menu }
+                     | keyMap SDL.ScancodeQ -> startingGameState { getScreen = Quit }
+                     | otherwise -> gameState
+
+
+            -- If going back to the main menu, delay for 0.5 seconds so that we
+            -- don't register the [space] being down twice, so that we don't
+            -- start a new game right away.
+            when (getScreen gameState1 == Menu) (threadDelay 500000)
 
             return gameState1
 
@@ -447,22 +476,17 @@ main = do
 
             let simulatedGameState = simulationLoop keyMap oldGameState
 
-            -- Initialize the backbuffer
-            SDL.clear renderer
+            renderAndFlip renderer $ do
+              -- Draw stuff into buffer
+              SDL.copy renderer textureBackground Nothing Nothing
+              SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall simulatedGameState)))
+              SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 simulatedGameState)))
+              SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 simulatedGameState)))
 
-            -- Draw stuff into buffer
-            SDL.copy renderer textureBackground Nothing Nothing
-            SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall simulatedGameState)))
-            SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 simulatedGameState)))
-            SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 simulatedGameState)))
-
-            renderText renderer scoreFont fontColorWhite (200, 0) (T.pack $ show (floor (getTimeRemainingSecs simulatedGameState)) ++ " seconds")
-            renderText renderer scoreFont fontColorWhite (400, 0) (T.pack $ show (getFps simulatedGameState) ++ " fps")
-            renderText renderer scoreFont fontColorWhite (0, 0) (T.pack $ show (getScore1 simulatedGameState))
-            renderText renderer scoreFont fontColorWhite (750, 0) (T.pack $ show (getScore2 simulatedGameState))
-
-            -- Flip the buffer and render!
-            SDL.present renderer
+              renderText renderer scoreFont fontColorWhite (200, 0) (T.pack $ show (floor (getTimeRemainingSecs simulatedGameState)) ++ " seconds")
+              renderText renderer scoreFont fontColorWhite (400, 0) (T.pack $ show (getFps simulatedGameState) ++ " fps")
+              renderText renderer scoreFont fontColorWhite (0, 0) (T.pack $ show (getScore1 simulatedGameState))
+              renderText renderer scoreFont fontColorWhite (750, 0) (T.pack $ show (getScore2 simulatedGameState))
 
             loopEndTime <- Clock.getTime Clock.Monotonic
             let diffNano = Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime loopEndTime
@@ -470,14 +494,19 @@ main = do
             -- Shot clock ticks down
             let gameDurationSeconds = getTimeRemainingSecs simulatedGameState - (fromIntegral diffNano / 1000000000)
 
-            -- Time *after* a potential sleep.
-            tickEndTime <- Clock.getTime Clock.Monotonic
-            let tickDiffNano = Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime tickEndTime
+            if gameDurationSeconds <= 0
+              then
+                return $
+                  simulatedGameState { getScreen = Winner }
+              else do
+                -- Time *after* a potential sleep.
+                tickEndTime <- Clock.getTime Clock.Monotonic
+                let tickDiffNano = Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime tickEndTime
 
-            return $
-              simulatedGameState { getFps = 1000000000 `div` tickDiffNano
-                                 , getTimeRemainingSecs = gameDurationSeconds
-                                 , getAccumulatedTimeSecs = getAccumulatedTimeSecs simulatedGameState + (fromIntegral diffNano / 1000000000) }
+                return $
+                  simulatedGameState { getFps = 1000000000 `div` tickDiffNano
+                                     , getTimeRemainingSecs = gameDurationSeconds
+                                     , getAccumulatedTimeSecs = getAccumulatedTimeSecs simulatedGameState + (fromIntegral diffNano / 1000000000) }
 
       unless (getScreen gameState'' == Quit) (loop gameState'')
 

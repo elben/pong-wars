@@ -23,3 +23,4 @@ http://lazyfoo.net/tutorials/SDL/index.php
 http://www.metanetsoftware.com/technique/tutorialA.html
 http://www.metanetsoftware.com/technique/tutorialB.html
 http://gameprogrammingpatterns.com/game-loop.html
+https://github.com/haskell-game/sdl2/tree/master/examples/lazyfoo
