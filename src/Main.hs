@@ -379,11 +379,14 @@ main = do
 
   textureMenu <- loadTexture renderer "resources/images/menu.bmp"
   textureBackground <- loadTexture renderer "resources/images/background.bmp"
-  textureBall <- loadTexture renderer "resources/images/ball.bmp"
-  texturePaddle <- loadTexture renderer "resources/images/paddle_blue.bmp"
+  textureBall <- loadTexture renderer "resources/images/ball_green.bmp"
+  texturePaddle1 <- loadTexture renderer "resources/images/paddle_blue.bmp"
+  texturePaddle2 <- loadTexture renderer "resources/images/paddle_pink.bmp"
+  textureWinnerBlue <- loadTexture renderer "resources/images/winner_blue.bmp"
+  textureWinnerPink <- loadTexture renderer "resources/images/winner_pink.bmp"
 
   scoreFont <- do
-    fp <- getDataFileName "resources/fonts/overpass/overpass-bold.otf"
+    fp <- getDataFileName "resources/fonts/NeonTubes2.otf"
     Font.load fp 40
 
   let
@@ -452,11 +455,12 @@ main = do
             return gameState1
 
           Winner -> do
-            renderAndFlip renderer $ do
-              renderText renderer scoreFont fontColorWhite (200, 0) "Congrats winner!"
-              renderText renderer scoreFont fontColorWhite (200, 300) "Press [space] to reset, or [q] to quit."
-              renderText renderer scoreFont fontColorWhite (0, 0) (T.pack $ show (getScore1 gameState))
-              renderText renderer scoreFont fontColorWhite (750, 0) (T.pack $ show (getScore2 gameState))
+            let texture = if getScore1 gameState > getScore2 gameState
+                          then textureWinnerBlue
+                          else textureWinnerPink
+
+            renderAndFlip renderer $
+              SDL.copy renderer texture Nothing Nothing
 
             let gameState1 =
                   if | keyMap SDL.ScancodeSpace -> startingGameState { getScreen = Menu }
@@ -466,7 +470,7 @@ main = do
 
             -- If going back to the main menu, delay for 0.5 seconds so that we
             -- don't register the [space] being down twice, so that we don't
-            -- start a new game right away.
+            -- start a new game right away. Give the menu a chance to render.
             when (getScreen gameState1 == Menu) (threadDelay 500000)
 
             return gameState1
@@ -480,8 +484,8 @@ main = do
               -- Draw stuff into buffer
               SDL.copy renderer textureBackground Nothing Nothing
               SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall simulatedGameState)))
-              SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle1 simulatedGameState)))
-              SDL.copy renderer texturePaddle Nothing (Just (toRectPaddle (getPaddle2 simulatedGameState)))
+              SDL.copy renderer texturePaddle1 Nothing (Just (toRectPaddle (getPaddle1 simulatedGameState)))
+              SDL.copy renderer texturePaddle2 Nothing (Just (toRectPaddle (getPaddle2 simulatedGameState)))
 
               renderText renderer scoreFont fontColorWhite (200, 0) (T.pack $ show (floor (getTimeRemainingSecs simulatedGameState)) ++ " seconds")
               renderText renderer scoreFont fontColorWhite (400, 0) (T.pack $ show (getFps simulatedGameState) ++ " fps")
@@ -496,8 +500,7 @@ main = do
 
             if gameDurationSeconds <= 0
               then
-                return $
-                  simulatedGameState { getScreen = Winner }
+                return $ simulatedGameState { getScreen = Winner }
               else do
                 -- Time *after* a potential sleep.
                 tickEndTime <- Clock.getTime Clock.Monotonic
@@ -515,7 +518,8 @@ main = do
 
   SDL.destroyTexture textureBackground
   SDL.destroyTexture textureBall
-  SDL.destroyTexture texturePaddle
+  SDL.destroyTexture texturePaddle1
+  SDL.destroyTexture texturePaddle2
   SDL.destroyTexture textureMenu
 
   SDL.destroyWindow window
