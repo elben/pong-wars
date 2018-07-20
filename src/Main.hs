@@ -45,7 +45,7 @@ loadTexture r filePath = do
   SDL.freeSurface surface
   return t
 
-data Screen = Menu | Play | Quit | Winner
+data Screen = Menu | Help | Play | Winner | Quit
   deriving (Show, Eq)
 
 type DeltaTime = Double
@@ -378,6 +378,7 @@ main = do
                   }
 
   textureMenu <- loadTexture renderer "resources/images/menu.bmp"
+  textureHelp <- loadTexture renderer "resources/images/help.bmp"
   textureBackground <- loadTexture renderer "resources/images/background.bmp"
   textureBall <- loadTexture renderer "resources/images/ball_green.bmp"
   texturePaddle1 <- loadTexture renderer "resources/images/paddle_blue.bmp"
@@ -447,10 +448,26 @@ main = do
             let gameState1 =
                   if | keyMap SDL.ScancodeSpace -> startingGameState { getScreen = Play }
                      | keyMap SDL.ScancodeQ -> gameState { getScreen = Quit }
+                     | keyMap SDL.ScancodeH -> gameState { getScreen = Help }
                      | otherwise -> gameState
 
             renderAndFlip renderer $
               SDL.copy renderer textureMenu Nothing Nothing
+
+            return gameState1
+          Help -> do
+            let gameState1 =
+                  if | keyMap SDL.ScancodeSpace -> startingGameState { getScreen = Menu }
+                     | keyMap SDL.ScancodeQ -> gameState { getScreen = Quit }
+                     | otherwise -> gameState
+
+            renderAndFlip renderer $
+              SDL.copy renderer textureHelp Nothing Nothing
+
+            -- If going back to the main menu, delay for 0.5 seconds so that we
+            -- don't register the [space] being down twice, so that we don't
+            -- start a new game right away. Give the menu a chance to render.
+            when (getScreen gameState1 == Menu) (threadDelay 500000)
 
             return gameState1
 

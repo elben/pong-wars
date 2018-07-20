@@ -12,8 +12,9 @@ category:            Game
 build-type:          Simple
 cabal-version:       >=1.10
 extra-source-files:  README.md
-data-files:          resources/images/*.png, resources/images/*.bmp,
-                     resources/fonts/overpass/*.otf, resources/fonts/*.otf
+data-files:          resources/images/*.bmp
+                   , resources/fonts/*.otf
+                   , resources/fonts/overpass/*.otf
 
 executable pong-wars
   hs-source-dirs:      src
