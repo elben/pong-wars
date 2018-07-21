@@ -3,18 +3,19 @@
 
 module Main (main) where
 
-import Control.Monad hiding (mapM_)
 import Control.Concurrent (threadDelay)
+import Control.Monad hiding (mapM_)
 import Data.Maybe
-import qualified Data.Text as T
 import Foreign.C.Types
 import Prelude hiding (any, mapM_)
-import qualified Data.List as L
 import SDL (($=))
-import qualified SDL.Font as Font
 import SDL.Vect
 import SDL.Video.Renderer
+import qualified Data.List as L
+import qualified Data.Text as T
 import qualified SDL
+import qualified SDL.Font as Font
+import qualified SDL.Mixer as Mix
 import qualified System.Clock as Clock
 
 import PongWars.Collision
@@ -45,7 +46,7 @@ loadTexture r filePath = do
   SDL.freeSurface surface
   return t
 
-data Screen = Menu | Help | Play | Winner | Quit
+data Screen = Menu | Help | Play | Winner | Pause | Quit
   deriving (Show, Eq)
 
 type DeltaTime = Double
@@ -357,8 +358,14 @@ renderAndFlip renderer f = do
 
 main :: IO ()
 main = do
-  SDL.initialize [SDL.InitVideo]
+  SDL.initialize [SDL.InitVideo, SDL.InitAudio]
   Font.initialize
+
+  Mix.openAudio Mix.defaultAudio 256
+
+  musicMenu <- Mix.load "resources/audio/purple-planet/Atlantis.ogg"
+  Mix.whenMusicFinished $ putStrLn "Music finished playing!"
+  Mix.playMusic Mix.Forever musicMenu
 
   -- Hint to SDL that we prefer to scale using linear filtering. Warn if not
   -- available.
@@ -368,7 +375,9 @@ main = do
        putStrLn "Warning: Linear texture filtering not enabled!"
 
   window <- SDL.createWindow "Pong Wars"
-    SDL.defaultWindow { SDL.windowInitialSize = V2 screenWidth screenHeight }
+    SDL.defaultWindow { SDL.windowInitialSize = V2 screenWidth screenHeight
+                      , SDL.windowMode = SDL.Fullscreen
+                      }
   SDL.showWindow window
 
   renderer <- SDL.createRenderer window (-1)
@@ -379,6 +388,7 @@ main = do
 
   textureMenu <- loadTexture renderer "resources/images/menu.bmp"
   textureHelp <- loadTexture renderer "resources/images/help.bmp"
+  texturePause <- loadTexture renderer "resources/images/pause.bmp"
   textureBackground <- loadTexture renderer "resources/images/background.bmp"
   textureBall <- loadTexture renderer "resources/images/ball_green.bmp"
   texturePaddle1 <- loadTexture renderer "resources/images/paddle_blue.bmp"
@@ -428,7 +438,7 @@ main = do
             }
         , getScore1 = 0
         , getScore2 = 0
-        , getTimeRemainingSecs = 5
+        , getTimeRemainingSecs = 12
         , getFps = 0
         , getAccumulatedTimeSecs = 0.0
        }
@@ -471,6 +481,22 @@ main = do
 
             return gameState1
 
+          Pause -> do
+            let gameState1 =
+                  if | keyMap SDL.ScancodeSpace -> gameState { getScreen = Play }
+                     | keyMap SDL.ScancodeQ -> gameState { getScreen = Quit }
+                     | otherwise -> gameState
+
+            renderAndFlip renderer $
+              SDL.copy renderer texturePause Nothing Nothing
+
+            -- If going back to the main menu, delay for 0.5 seconds so that we
+            -- don't register the [space] being down twice, so that we don't
+            -- start a new game right away. Give the menu a chance to render.
+            when (getScreen gameState1 == Menu) (threadDelay 500000)
+
+            return gameState1
+
           Winner -> do
             let texture = if getScore1 gameState > getScore2 gameState
                           then textureWinnerBlue
@@ -492,41 +518,44 @@ main = do
 
             return gameState1
 
-          Play -> do
-            loopStartTime <- Clock.getTime Clock.Monotonic
+          Play ->
+            if keyMap SDL.ScancodeEscape
+            then return $ gameState { getScreen = Pause }
+            else do
+              loopStartTime <- Clock.getTime Clock.Monotonic
 
-            let simulatedGameState = simulationLoop keyMap oldGameState
+              let simulatedGameState = simulationLoop keyMap oldGameState
 
-            renderAndFlip renderer $ do
-              -- Draw stuff into buffer
-              SDL.copy renderer textureBackground Nothing Nothing
-              SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall simulatedGameState)))
-              SDL.copy renderer texturePaddle1 Nothing (Just (toRectPaddle (getPaddle1 simulatedGameState)))
-              SDL.copy renderer texturePaddle2 Nothing (Just (toRectPaddle (getPaddle2 simulatedGameState)))
+              renderAndFlip renderer $ do
+                -- Draw stuff into buffer
+                SDL.copy renderer textureBackground Nothing Nothing
+                SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall simulatedGameState)))
+                SDL.copy renderer texturePaddle1 Nothing (Just (toRectPaddle (getPaddle1 simulatedGameState)))
+                SDL.copy renderer texturePaddle2 Nothing (Just (toRectPaddle (getPaddle2 simulatedGameState)))
 
-              renderText renderer scoreFont fontColorWhite (200, 0) (T.pack $ show (floor (getTimeRemainingSecs simulatedGameState)) ++ " seconds")
-              renderText renderer scoreFont fontColorWhite (400, 0) (T.pack $ show (getFps simulatedGameState) ++ " fps")
-              renderText renderer scoreFont fontColorWhite (0, 0) (T.pack $ show (getScore1 simulatedGameState))
-              renderText renderer scoreFont fontColorWhite (750, 0) (T.pack $ show (getScore2 simulatedGameState))
+                renderText renderer scoreFont fontColorWhite (380, 20) (T.pack $ show (floor (getTimeRemainingSecs simulatedGameState)))
+                renderText renderer scoreFont fontColorWhite (20, 20) (T.pack $ show (getScore1 simulatedGameState))
+                renderText renderer scoreFont fontColorWhite (745, 20) (T.pack $ show (getScore2 simulatedGameState))
+                -- renderText renderer scoreFont fontColorWhite (400, 0) (T.pack $ show (getFps simulatedGameState) ++ " fps")
 
-            loopEndTime <- Clock.getTime Clock.Monotonic
-            let diffNano = Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime loopEndTime
+              loopEndTime <- Clock.getTime Clock.Monotonic
+              let diffNano = Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime loopEndTime
 
-            -- Shot clock ticks down
-            let gameDurationSeconds = getTimeRemainingSecs simulatedGameState - (fromIntegral diffNano / 1000000000)
+              -- Shot clock ticks down
+              let gameDurationSeconds = getTimeRemainingSecs simulatedGameState - (fromIntegral diffNano / 1000000000)
 
-            if gameDurationSeconds <= 0
-              then
-                return $ simulatedGameState { getScreen = Winner }
-              else do
-                -- Time *after* a potential sleep.
-                tickEndTime <- Clock.getTime Clock.Monotonic
-                let tickDiffNano = Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime tickEndTime
+              if gameDurationSeconds <= 0
+                then
+                  return $ simulatedGameState { getScreen = Winner }
+                else do
+                  -- Time *after* a potential sleep.
+                  tickEndTime <- Clock.getTime Clock.Monotonic
+                  let tickDiffNano = Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime tickEndTime
 
-                return $
-                  simulatedGameState { getFps = 1000000000 `div` tickDiffNano
-                                     , getTimeRemainingSecs = gameDurationSeconds
-                                     , getAccumulatedTimeSecs = getAccumulatedTimeSecs simulatedGameState + (fromIntegral diffNano / 1000000000) }
+                  return $
+                    simulatedGameState { getFps = 1000000000 `div` tickDiffNano
+                                       , getTimeRemainingSecs = gameDurationSeconds
+                                       , getAccumulatedTimeSecs = getAccumulatedTimeSecs simulatedGameState + (fromIntegral diffNano / 1000000000) }
 
       unless (getScreen gameState'' == Quit) (loop gameState'')
 
@@ -541,5 +570,7 @@ main = do
 
   SDL.destroyWindow window
   Font.quit
+  Mix.free musicMenu
+  Mix.closeAudio
   SDL.quit
 

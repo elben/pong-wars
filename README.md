@@ -3,7 +3,7 @@
 # Development
 
 ```
-brew install sdl2 sdl2_image sdl2_ttf pkg-config
+brew install sdl2 sdl2_image sdl2_ttf sdl2_mixer pkg-config
 
 stack build
 
