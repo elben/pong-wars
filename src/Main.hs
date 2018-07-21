@@ -62,6 +62,10 @@ data GameState = GameState
   , getPaddle2 :: Paddle
   , getScore1 :: Int
   , getScore2 :: Int
+  , getPower1 :: Power
+  , getPower2 :: Power
+  , getConsecutiveSaves1 :: Int
+  , getConsecutiveSaves2 :: Int
   , getTimeRemainingSecs :: Double
   , getFps :: Integer
   , getAccumulatedTimeSecs :: Double
@@ -87,6 +91,9 @@ data Ball = Ball
   , getBallSpinVelocity :: Double  -- ^ Amount of velocity pushing perpendicular of heading, in pixels/tick.
   }
   deriving Show
+
+data Power = NoPower | Defense
+  deriving (Show, Eq)
 
 massWall :: Mass
 massWall = 100
@@ -303,6 +310,8 @@ movePaddleState paddleKeyMap keyMap paddle =
     Just (_, movement) -> movement paddle
     Nothing -> paddleStop paddle
 
+suddenDeath :: GameState -> Bool
+suddenDeath gs = getTimeRemainingSecs gs <= 0 && getScore1 gs == getScore2 gs
 
 -- The render (below) "produces" time, and the simulation "consumes"
 -- time. Keep on looping until the simulation has consumed all (with
@@ -438,7 +447,11 @@ main = do
             }
         , getScore1 = 0
         , getScore2 = 0
-        , getTimeRemainingSecs = 12
+        , getPower1 = NoPower
+        , getPower2 = NoPower
+        , getConsecutiveSaves1 = 0
+        , getConsecutiveSaves2 = 0
+        , getTimeRemainingSecs = 1
         , getFps = 0
         , getAccumulatedTimeSecs = 0.0
        }
@@ -533,7 +546,10 @@ main = do
                 SDL.copy renderer texturePaddle1 Nothing (Just (toRectPaddle (getPaddle1 simulatedGameState)))
                 SDL.copy renderer texturePaddle2 Nothing (Just (toRectPaddle (getPaddle2 simulatedGameState)))
 
-                renderText renderer scoreFont fontColorWhite (380, 20) (T.pack $ show (floor (getTimeRemainingSecs simulatedGameState)))
+                if suddenDeath simulatedGameState
+                  then renderText renderer scoreFont fontColorWhite (250, 20) (T.pack "Sudden Death!")
+                  else renderText renderer scoreFont fontColorWhite (380, 20) (T.pack $ show (floor (getTimeRemainingSecs simulatedGameState)))
+
                 renderText renderer scoreFont fontColorWhite (20, 20) (T.pack $ show (getScore1 simulatedGameState))
                 renderText renderer scoreFont fontColorWhite (745, 20) (T.pack $ show (getScore2 simulatedGameState))
                 -- renderText renderer scoreFont fontColorWhite (400, 0) (T.pack $ show (getFps simulatedGameState) ++ " fps")
@@ -544,18 +560,17 @@ main = do
               -- Shot clock ticks down
               let gameDurationSeconds = getTimeRemainingSecs simulatedGameState - (fromIntegral diffNano / 1000000000)
 
-              if gameDurationSeconds <= 0
-                then
-                  return $ simulatedGameState { getScreen = Winner }
-                else do
-                  -- Time *after* a potential sleep.
-                  tickEndTime <- Clock.getTime Clock.Monotonic
-                  let tickDiffNano = Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime tickEndTime
+              tickEndTime <- Clock.getTime Clock.Monotonic
+              let tickDiffNano = Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime tickEndTime
 
-                  return $
+              let finalGameState =
                     simulatedGameState { getFps = 1000000000 `div` tickDiffNano
                                        , getTimeRemainingSecs = gameDurationSeconds
                                        , getAccumulatedTimeSecs = getAccumulatedTimeSecs simulatedGameState + (fromIntegral diffNano / 1000000000) }
+
+              if gameDurationSeconds >= 0 || suddenDeath finalGameState
+                then return finalGameState
+                else return $ finalGameState { getScreen = Winner }
 
       unless (getScreen gameState'' == Quit) (loop gameState'')
 
