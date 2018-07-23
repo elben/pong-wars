@@ -201,9 +201,13 @@ ballWallCollision gameState =
       b4 = updateBallStateInCollision leftReport b3
       score1Incr = if isCollided rightReport then 1 else 0
       score2Incr = if isCollided leftReport then 1 else 0
+      consecutiveSaves1 = if isCollided leftReport then 0 else getConsecutiveSaves1 gameState
+      consecutiveSaves2 = if isCollided rightReport then 0 else getConsecutiveSaves2 gameState
       gameState' = gameState { getBall = b4
                              , getScore1 = getScore1 gameState + score1Incr
                              , getScore2 = getScore2 gameState + score2Incr
+                             , getConsecutiveSaves1 = consecutiveSaves1
+                             , getConsecutiveSaves2 = consecutiveSaves2
                              }
   in gameState'
 
@@ -267,9 +271,11 @@ ballPaddleCollision :: GameState -> GameState
 ballPaddleCollision gameState =
   let paddle1Collision = checkCollision (paddleToObject (getPaddle1 gameState)) (ballToObject (getBall gameState))
       paddle2Collision = checkCollision (paddleToObject (getPaddle2 gameState)) (ballToObject (getBall gameState))
-      gameState' = gameState { getBall = updateBallStateInCollision paddle1Collision (getBall gameState) }
-      gameState'' = gameState { getBall = updateBallStateInCollision paddle2Collision (getBall gameState') }
-  in gameState''
+      gameState1 = gameState { getBall = updateBallStateInCollision paddle1Collision (getBall gameState)
+                             , getConsecutiveSaves1 = if isCollided paddle1Collision then getConsecutiveSaves1 gameState + 1 else getConsecutiveSaves1 gameState }
+      gameState2 = gameState1 { getBall = updateBallStateInCollision paddle2Collision (getBall gameState1)
+                              , getConsecutiveSaves2 = if isCollided paddle2Collision then getConsecutiveSaves2 gameState1 + 1 else getConsecutiveSaves2 gameState1 }
+  in gameState2
 
 toCInt :: Int -> CInt
 toCInt = fromIntegral
