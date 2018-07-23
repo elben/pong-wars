@@ -40,7 +40,8 @@ resolver: lts-9.1
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
-- sdl2-ttf-2.0.1
+- sdl2-2.4.1.0
+- sdl2-ttf-2.1.0
 - sdl2-mixer-1.1.0
 
 # Override default flag values for local packages and extra-deps
