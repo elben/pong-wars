@@ -376,12 +376,6 @@ main = do
   SDL.initialize [SDL.InitVideo, SDL.InitAudio]
   Font.initialize
 
-  Mix.openAudio Mix.defaultAudio 256
-
-  musicMenu <- Mix.load "resources/audio/purple-planet/Atlantis.ogg"
-  Mix.whenMusicFinished $ putStrLn "Music finished playing!"
-  Mix.playMusic Mix.Forever musicMenu
-
   -- Hint to SDL that we prefer to scale using linear filtering. Warn if not
   -- available.
   SDL.HintRenderScaleQuality $= SDL.ScaleLinear
@@ -391,7 +385,7 @@ main = do
 
   window <- SDL.createWindow "Pong Wars"
     SDL.defaultWindow { SDL.windowInitialSize = V2 screenWidth screenHeight
-                      , SDL.windowMode = SDL.Fullscreen
+                      -- , SDL.windowMode = SDL.Fullscreen
                       }
   SDL.showWindow window
 
@@ -414,6 +408,16 @@ main = do
   scoreFont <- do
     fp <- getDataFileName "resources/fonts/NeonTubes2.otf"
     Font.load fp 40
+
+  Mix.openAudio Mix.defaultAudio 512
+
+  -- https://github.com/haskell-game/sdl2-mixer/issues/5
+  print =<< Mix.musicDecoders
+  musicMenuF <- BS.readFile "resources/audio/purple-planet/Slipstream2.ogg"
+  -- Mix.whenMusicFinished $ putStrLn "Music finished playing!"
+  -- Mix.playMusic Mix.Forever musicMenu
+  decoded <- Mix.decode musicMenuF
+  Mix.playMusic Mix.Once decoded
 
   let
     startingGameState =
@@ -457,7 +461,7 @@ main = do
         , getPower2 = NoPower
         , getConsecutiveSaves1 = 0
         , getConsecutiveSaves2 = 0
-        , getTimeRemainingSecs = 1
+        , getTimeRemainingSecs = 120
         , getFps = 0
         , getAccumulatedTimeSecs = 0.0
        }
@@ -591,7 +595,7 @@ main = do
 
   SDL.destroyWindow window
   Font.quit
-  Mix.free musicMenu
+  Mix.free decoded
   Mix.closeAudio
   SDL.quit
 
