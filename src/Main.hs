@@ -65,6 +65,10 @@ data GameState = GameState
   , getScore2 :: Int
   , getPower1 :: Power
   , getPower2 :: Power
+  , getPowerActive1 :: Power
+  , getPowerActive2 :: Power
+  , getPowerActiveRemSecs1 :: Double -- Seconds remaining for player 1's power
+  , getPowerActiveRemSecs2 :: Double -- Seconds remaining for player 2's power
   , getConsecutiveSaves1 :: Int
   , getConsecutiveSaves2 :: Int
   , getTimeRemainingSecs :: Double
@@ -93,13 +97,25 @@ data Ball = Ball
   }
   deriving Show
 
-data Power = NoPower | Speed | Defense
+data Power = NoPower
+           | Speed    -- Increase ball speed
+           | Fortress -- Increase paddle size
+           | Quagmire -- Slow opponent down
+           -- | Hyper -- Speed opponent down
   deriving (Show, Eq)
 
 showPower :: Power -> T.Text
 showPower NoPower = ""
 showPower Speed = "Speed"
-showPower Defense = "Defense"
+showPower Fortress = "Fortress"
+showPower Quagmire = "Quagmire"
+
+-- Number of seconds a power gets
+secondsInPower :: Power -> Double
+secondsInPower NoPower = 0.0
+secondsInPower Speed = 10.0
+secondsInPower Fortress = 10.0
+secondsInPower Quagmire = 5.0
 
 massWall :: Mass
 massWall = 100
@@ -342,13 +358,27 @@ suddenDeath gs = getTimeRemainingSecs gs <= 0 && getScore1 gs == getScore2 gs
 
 determinePowers :: GameState -> GameState
 determinePowers gameState =
-  let gameState1 = if getConsecutiveSaves1 gameState >= 2 && getPower1 gameState == NoPower
+  let gameState1 = if getConsecutiveSaves1 gameState >= 4 && getPower1 gameState == NoPower
                      then gameState { getConsecutiveSaves1 = 0, getPower1 = Speed }
                      else gameState
-      gameState2 = if getConsecutiveSaves2 gameState1 >= 2 && getPower2 gameState1 == NoPower
+      gameState2 = if getConsecutiveSaves2 gameState1 >= 4 && getPower2 gameState1 == NoPower
                      then gameState1 { getConsecutiveSaves2 = 0, getPower2 = Speed }
                      else gameState1
   in gameState2
+
+activatePower :: (SDL.Scancode -> Bool) -> GameState -> GameState
+activatePower keyMap gs =
+  let gs1 = if getPower1 gs /= NoPower && keyMap SDL.ScancodeD
+              then gs { getPower1 = NoPower
+                      , getPowerActive1 = getPower1 gs
+                      , getPowerActiveRemSecs1 = secondsInPower (getPower1 gs) }
+              else gs
+      gs2 = if getPower2 gs /= NoPower && keyMap SDL.ScancodeLeft
+              then gs { getPower2 = NoPower
+                      , getPowerActive2 = getPower2 gs
+                      , getPowerActiveRemSecs2 = secondsInPower (getPower2 gs) }
+              else gs1
+  in gs2
 
 -- The render (below) "produces" time, and the simulation "consumes"
 -- time. Keep on looping until the simulation has consumed all (with
@@ -382,7 +412,7 @@ simulationLoop keyMap gameState =
         gameState7 = paddleWallCollision gameState6
         gameState8 = ballPaddleCollision gameState7
 
-        gameState9 = determinePowers gameState8
+        gameState9 = (determinePowers . activatePower keyMap) gameState8
 
         gameState10 = gameState9 { getAccumulatedTimeSecs = getAccumulatedTimeSecs gameState9 - dt }
 
@@ -495,7 +525,11 @@ main = do
         , getScore1 = 0
         , getScore2 = 0
         , getPower1 = Speed
-        , getPower2 = Defense
+        , getPower2 = Fortress
+        , getPowerActive1 = NoPower
+        , getPowerActive2 = NoPower
+        , getPowerActiveRemSecs1 = 0.0
+        , getPowerActiveRemSecs2 = 0.0
         , getConsecutiveSaves1 = 0
         , getConsecutiveSaves2 = 0
         , getTimeRemainingSecs = 120
@@ -586,7 +620,8 @@ main = do
 
               let simulatedGameState = simulationLoop keyMap gameState
 
-              when (keyMap SDL.ScancodeD) (print simulatedGameState)
+              -- Press "P" to spit out debugging info.
+              when (keyMap SDL.ScancodeP) (print simulatedGameState)
 
               -- playing <- Mix.playingMusic
               -- print playing
