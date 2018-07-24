@@ -11,6 +11,7 @@ import Prelude hiding (any, mapM_)
 import SDL (($=))
 import SDL.Vect
 import SDL.Video.Renderer
+import qualified Data.ByteString as BS
 import qualified Data.List as L
 import qualified Data.Text as T
 import qualified SDL
@@ -92,8 +93,13 @@ data Ball = Ball
   }
   deriving Show
 
-data Power = NoPower | Defense
+data Power = NoPower | Speed | Defense
   deriving (Show, Eq)
+
+showPower :: Power -> T.Text
+showPower NoPower = ""
+showPower Speed = "Speed"
+showPower Defense = "Defense"
 
 massWall :: Mass
 massWall = 100
@@ -280,13 +286,28 @@ ballPaddleCollision gameState =
 toCInt :: Int -> CInt
 toCInt = fromIntegral
 
-renderText :: Renderer -> Font.Font -> Font.Color -> (Int, Int) -> T.Text -> IO ()
-renderText renderer font color pos text = do
+data HAlign = AlignLeft | AlignRight | AlignCenter
+data VAlign = AlignTop | AlignBottom | AlignMiddle
+
+renderTextAlign :: Renderer -> Font.Font -> Font.Color -> (Int, Int) -> HAlign -> VAlign -> T.Text -> IO ()
+renderTextAlign renderer font color pos halign valign text = do
   blendedText <- Font.blended font color text
   (w, h) <- Font.size font text
   texture <- SDL.createTextureFromSurface renderer blendedText
-  SDL.copy renderer texture Nothing (Just (Rectangle (P (V2 (toCInt $ fst pos) (toCInt $ snd pos))) (V2 (toCInt w) (toCInt h))))
+  let x = case halign of
+            AlignLeft -> fst pos
+            AlignCenter -> fst pos - w `div` 2
+            AlignRight -> fst pos - w
+  let y = case valign of
+            AlignTop -> snd pos
+            AlignMiddle -> snd pos - h `div` 2
+            AlignBottom -> snd pos - h
+  SDL.copy renderer texture Nothing (Just (Rectangle (P (V2 (toCInt x) (toCInt y))) (V2 (toCInt w) (toCInt h))))
   SDL.destroyTexture texture
+
+renderText :: Renderer -> Font.Font -> Font.Color -> (Int, Int) -> T.Text -> IO ()
+renderText renderer font color pos =
+  renderTextAlign renderer font color pos AlignLeft AlignTop
 
 type PaddleKeyMap = [([SDL.Scancode], Paddle -> Paddle)]
 
@@ -318,6 +339,16 @@ movePaddleState paddleKeyMap keyMap paddle =
 
 suddenDeath :: GameState -> Bool
 suddenDeath gs = getTimeRemainingSecs gs <= 0 && getScore1 gs == getScore2 gs
+
+determinePowers :: GameState -> GameState
+determinePowers gameState =
+  let gameState1 = if getConsecutiveSaves1 gameState >= 2 && getPower1 gameState == NoPower
+                     then gameState { getConsecutiveSaves1 = 0, getPower1 = Speed }
+                     else gameState
+      gameState2 = if getConsecutiveSaves2 gameState1 >= 2 && getPower2 gameState1 == NoPower
+                     then gameState1 { getConsecutiveSaves2 = 0, getPower2 = Speed }
+                     else gameState1
+  in gameState2
 
 -- The render (below) "produces" time, and the simulation "consumes"
 -- time. Keep on looping until the simulation has consumed all (with
@@ -351,9 +382,11 @@ simulationLoop keyMap gameState =
         gameState7 = paddleWallCollision gameState6
         gameState8 = ballPaddleCollision gameState7
 
-        gameState9 = gameState8 { getAccumulatedTimeSecs = getAccumulatedTimeSecs gameState8 - dt }
+        gameState9 = determinePowers gameState8
 
-    in simulationLoop keyMap gameState9
+        gameState10 = gameState9 { getAccumulatedTimeSecs = getAccumulatedTimeSecs gameState9 - dt }
+
+    in simulationLoop keyMap gameState10
   else gameState
 
 -- Make game end when game clock hits 0.
@@ -405,15 +438,19 @@ main = do
   textureWinnerBlue <- loadTexture renderer "resources/images/winner_blue.bmp"
   textureWinnerPink <- loadTexture renderer "resources/images/winner_pink.bmp"
 
-  scoreFont <- do
+  mediumFont <- do
     fp <- getDataFileName "resources/fonts/NeonTubes2.otf"
     Font.load fp 40
+
+  smallFont <- do
+    fp <- getDataFileName "resources/fonts/NeonTubes2.otf"
+    Font.load fp 20
 
   Mix.openAudio Mix.defaultAudio 512
 
   -- https://github.com/haskell-game/sdl2-mixer/issues/5
   print =<< Mix.musicDecoders
-  musicMenuF <- BS.readFile "resources/audio/purple-planet/Slipstream2.ogg"
+  musicMenuF <- BS.readFile "resources/audio/purple-planet/Slipstream.mp3"
   -- Mix.whenMusicFinished $ putStrLn "Music finished playing!"
   -- Mix.playMusic Mix.Forever musicMenu
   decoded <- Mix.decode musicMenuF
@@ -457,8 +494,8 @@ main = do
             }
         , getScore1 = 0
         , getScore2 = 0
-        , getPower1 = NoPower
-        , getPower2 = NoPower
+        , getPower1 = Speed
+        , getPower2 = Defense
         , getConsecutiveSaves1 = 0
         , getConsecutiveSaves2 = 0
         , getTimeRemainingSecs = 120
@@ -547,7 +584,12 @@ main = do
             else do
               loopStartTime <- Clock.getTime Clock.Monotonic
 
-              let simulatedGameState = simulationLoop keyMap oldGameState
+              let simulatedGameState = simulationLoop keyMap gameState
+
+              when (keyMap SDL.ScancodeD) (print simulatedGameState)
+
+              -- playing <- Mix.playingMusic
+              -- print playing
 
               renderAndFlip renderer $ do
                 -- Draw stuff into buffer
@@ -557,12 +599,17 @@ main = do
                 SDL.copy renderer texturePaddle2 Nothing (Just (toRectPaddle (getPaddle2 simulatedGameState)))
 
                 if suddenDeath simulatedGameState
-                  then renderText renderer scoreFont fontColorWhite (250, 20) (T.pack "Sudden Death!")
-                  else renderText renderer scoreFont fontColorWhite (380, 20) (T.pack $ show (floor (getTimeRemainingSecs simulatedGameState)))
+                  then renderTextAlign renderer mediumFont fontColorWhite (400, 20) AlignCenter AlignTop "Sudden Death!"
+                  else renderTextAlign renderer mediumFont fontColorWhite (400, 20) AlignCenter AlignTop (T.pack $ show (floor (getTimeRemainingSecs simulatedGameState)))
 
-                renderText renderer scoreFont fontColorWhite (20, 20) (T.pack $ show (getScore1 simulatedGameState))
-                renderText renderer scoreFont fontColorWhite (745, 20) (T.pack $ show (getScore2 simulatedGameState))
-                -- renderText renderer scoreFont fontColorWhite (400, 0) (T.pack $ show (getFps simulatedGameState) ++ " fps")
+                renderText renderer mediumFont fontColorWhite (20, 20) (T.pack $ show (getScore1 simulatedGameState))
+                renderTextAlign renderer mediumFont fontColorWhite (780, 20) AlignRight AlignTop (T.pack $ show (getScore2 simulatedGameState))
+
+                when (getPower1 simulatedGameState /= NoPower) $
+                  renderTextAlign renderer smallFont fontColorWhite (30, 570) AlignLeft AlignBottom (showPower (getPower1 simulatedGameState))
+
+                when (getPower2 simulatedGameState /= NoPower) $
+                  renderTextAlign renderer smallFont fontColorWhite (770, 570) AlignRight AlignBottom (showPower (getPower2 simulatedGameState))
 
               loopEndTime <- Clock.getTime Clock.Monotonic
               let diffNano = Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime loopEndTime
