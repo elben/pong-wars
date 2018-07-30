@@ -63,12 +63,6 @@ data GameState = GameState
   , getPaddle2 :: Paddle
   , getPlayer1 :: PlayerData
   , getPlayer2 :: PlayerData
-  , getPower1 :: Power
-  , getPower2 :: Power
-  , getPowerActive1 :: Power
-  , getPowerActive2 :: Power
-  , getPowerActiveRemSecs1 :: Double -- Seconds remaining for player 1's power
-  , getPowerActiveRemSecs2 :: Double -- Seconds remaining for player 2's power
   , getTimeRemainingSecs :: Double
   , getFps :: Integer
   , getAccumulatedTimeSecs :: Double
@@ -391,40 +385,44 @@ determinePowers gameState =
 
 activatePower :: (SDL.Scancode -> Bool) -> GameState -> GameState
 activatePower keyMap gs =
-  let gs1 = if getPower1 gs /= NoPower && keyMap SDL.ScancodeD
-              then gs { getPower1 = NoPower
-                      , getPowerActive1 = getPower1 gs
-                      , getPowerActiveRemSecs1 = secondsInPower (getPower1 gs) }
+  let gs1 = if getPower (getPlayer1 gs) /= NoPower && keyMap SDL.ScancodeD
+              then gs { getPlayer1 =
+                          (getPlayer1 gs)
+                          { getPower = NoPower
+                          , getPowerActive = getPower (getPlayer1 gs)
+                          , getPowerActiveRemSecs = secondsInPower (getPower (getPlayer1 gs)) } }
               else gs
-      gs2 = if getPower2 gs1 /= NoPower && keyMap SDL.ScancodeLeft
-              then gs1 { getPower2 = NoPower
-                      , getPowerActive2 = getPower2 gs1
-                      , getPowerActiveRemSecs2 = secondsInPower (getPower2 gs1) }
+      gs2 = if getPower (getPlayer2 gs1) /= NoPower && keyMap SDL.ScancodeLeft
+              then gs1 { getPlayer2 =
+                          (getPlayer2 gs1)
+                          { getPower = NoPower
+                          , getPowerActive = getPower (getPlayer2 gs1)
+                          , getPowerActiveRemSecs = secondsInPower (getPower (getPlayer2 gs1)) } }
               else gs1
 
       -- Activate Speed if needed
-      gs3 = if (getPowerActive1 gs /= Speed && getPowerActive1 gs2 == Speed) ||
-               (getPowerActive2 gs /= Speed && getPowerActive2 gs2 == Speed)
+      gs3 = if (getPowerActive (getPlayer1 gs) /= Speed && getPowerActive (getPlayer1 gs2) == Speed) ||
+               (getPowerActive (getPlayer2 gs) /= Speed && getPowerActive (getPlayer2 gs2) == Speed)
             then
               let ball = getBall gs2
               in gs2 { getBall = ball { getBallVelocity = ballVelocitySpeed } }
             else gs2
 
       -- De-activate Speed if needed (player 1)
-      gs4 = if getPowerActive1 gs3 == Speed && getPowerActiveRemSecs1 gs3 <= 0
+      gs4 = if getPowerActive (getPlayer1 gs3) == Speed && getPowerActiveRemSecs (getPlayer1 gs3) <= 0
             then
               let ball = getBall gs3
               in gs3 { getBall = ball { getBallVelocity = ballVelocityNormal }
-                     , getPowerActive1 = NoPower
+                     , getPlayer1 = (getPlayer1 gs3) { getPowerActive = NoPower }
                      }
             else gs3
 
       -- De-activate Speed if needed (player 2)
-      gs5 = if getPowerActive2 gs4 == Speed && getPowerActiveRemSecs2 gs4 <= 0
+      gs5 = if getPowerActive (getPlayer2 gs4) == Speed && getPowerActiveRemSecs (getPlayer2 gs4) <= 0
             then
               let ball = getBall gs4
               in gs4 { getBall = ball { getBallVelocity = ballVelocityNormal }
-                     , getPowerActive2 = NoPower
+                     , getPlayer2 = (getPlayer2 gs4) { getPowerActive = NoPower }
                      }
             else gs4
   in gs5
@@ -570,7 +568,7 @@ main = do
         , getPlayer1 =
             PlayerData
             { getScore = 0
-            , getPower = NoPower
+            , getPower = Speed
             , getPowerActive = NoPower
             , getPowerActiveRemSecs = 0.0
             , getConsecutiveSaves = 0
@@ -583,12 +581,6 @@ main = do
             , getPowerActiveRemSecs = 0.0
             , getConsecutiveSaves = 0
             }
-        , getPower1 = Speed
-        , getPower2 = Fortress
-        , getPowerActive1 = NoPower
-        , getPowerActive2 = NoPower
-        , getPowerActiveRemSecs1 = 0.0
-        , getPowerActiveRemSecs2 = 0.0
         , getTimeRemainingSecs = 90
         , getFps = 0
         , getAccumulatedTimeSecs = 0.0
@@ -689,16 +681,17 @@ main = do
 
                 if suddenDeath simulatedGameState
                   then renderTextAlign renderer mediumFont fontColorWhite (400, 20) AlignCenter AlignTop "Sudden Death!"
-                  else renderTextAlign renderer mediumFont fontColorWhite (400, 20) AlignCenter AlignTop (T.pack $ show (floor (getTimeRemainingSecs simulatedGameState)))
+                  else renderTextAlign renderer mediumFont fontColorWhite (400, 20) AlignCenter AlignTop $
+                         (T.pack $ show (floor (getTimeRemainingSecs simulatedGameState) :: Integer))
 
                 renderText renderer mediumFont fontColorWhite (20, 20) (T.pack $ show (getScore (getPlayer1 simulatedGameState)))
                 renderTextAlign renderer mediumFont fontColorWhite (780, 20) AlignRight AlignTop (T.pack $ show (getScore (getPlayer2 simulatedGameState)))
 
-                when (getPower1 simulatedGameState /= NoPower) $
-                  renderTextAlign renderer smallFont fontColorWhite (30, 570) AlignLeft AlignBottom (showPower (getPower1 simulatedGameState))
+                when (getPower (getPlayer1 simulatedGameState) /= NoPower) $
+                  renderTextAlign renderer smallFont fontColorWhite (30, 570) AlignLeft AlignBottom (showPower (getPower (getPlayer1 simulatedGameState)))
 
-                when (getPower2 simulatedGameState /= NoPower) $
-                  renderTextAlign renderer smallFont fontColorWhite (770, 570) AlignRight AlignBottom (showPower (getPower2 simulatedGameState))
+                when (getPower (getPlayer2 simulatedGameState) /= NoPower) $
+                  renderTextAlign renderer smallFont fontColorWhite (770, 570) AlignRight AlignBottom (showPower (getPower (getPlayer2 simulatedGameState)))
 
               loopEndTime <- Clock.getTime Clock.Monotonic
               let diffSecs = fromIntegral (Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime loopEndTime) / 1000000000
@@ -713,14 +706,18 @@ main = do
                     simulatedGameState { getFps = 1000000000 `div` tickDiffNano
                                        , getTimeRemainingSecs = gameDurationSeconds
                                        , getAccumulatedTimeSecs = getAccumulatedTimeSecs simulatedGameState + diffSecs
-                                       , getPowerActiveRemSecs1 =
-                                           if getPowerActive1 simulatedGameState == NoPower
-                                           then 0.0
-                                           else getPowerActiveRemSecs1 simulatedGameState - diffSecs
-                                       , getPowerActiveRemSecs2 =
-                                           if getPowerActive2 simulatedGameState == NoPower
-                                           then 0.0
-                                           else getPowerActiveRemSecs2 simulatedGameState - diffSecs
+                                       , getPlayer1 =
+                                           (getPlayer1 simulatedGameState)
+                                           { getPowerActiveRemSecs =
+                                               if getPowerActive (getPlayer1 simulatedGameState) == NoPower
+                                               then 0.0
+                                               else getPowerActiveRemSecs (getPlayer1 simulatedGameState) - diffSecs }
+                                       , getPlayer2 =
+                                           (getPlayer2 simulatedGameState)
+                                           { getPowerActiveRemSecs =
+                                               if getPowerActive (getPlayer2 simulatedGameState) == NoPower
+                                               then 0.0
+                                               else getPowerActiveRemSecs (getPlayer2 simulatedGameState) - diffSecs }
                                        }
 
               if gameDurationSeconds >= 0 || suddenDeath finalGameState
