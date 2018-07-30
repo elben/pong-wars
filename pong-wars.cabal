@@ -14,7 +14,6 @@ cabal-version:       >=1.10
 extra-source-files:  README.md
 data-files:          resources/images/*.bmp
                    , resources/fonts/*.otf
-                   , resources/fonts/overpass/*.otf
                    , resources/audio/purple-planet/*.ogg
 
 executable pong-wars
