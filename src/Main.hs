@@ -69,8 +69,6 @@ data GameState = GameState
   , getPowerActive2 :: Power
   , getPowerActiveRemSecs1 :: Double -- Seconds remaining for player 1's power
   , getPowerActiveRemSecs2 :: Double -- Seconds remaining for player 2's power
-  , getConsecutiveSaves1 :: Int
-  , getConsecutiveSaves2 :: Int
   , getTimeRemainingSecs :: Double
   , getFps :: Integer
   , getAccumulatedTimeSecs :: Double
@@ -88,6 +86,9 @@ data PlayerData = PlayerData
 
 incrScore :: Int -> PlayerData -> PlayerData
 incrScore incr pd = pd { getScore = getScore pd + incr }
+
+setConsecutiveSaves :: Int -> PlayerData -> PlayerData
+setConsecutiveSaves n pd = pd { getConsecutiveSaves = n }
 
 -- A Paddle state consist of its position, which represents the center of the
 -- paddle, and the half-width/height dimensions.
@@ -241,13 +242,11 @@ ballWallCollision gameState =
       b4 = updateBallStateInCollision leftReport b3
       score1Incr = if isCollided rightReport then 1 else 0
       score2Incr = if isCollided leftReport then 1 else 0
-      consecutiveSaves1 = if isCollided leftReport then 0 else getConsecutiveSaves1 gameState
-      consecutiveSaves2 = if isCollided rightReport then 0 else getConsecutiveSaves2 gameState
+      saves1 = if isCollided leftReport then 0 else getConsecutiveSaves (getPlayer1 gameState)
+      saves2 = if isCollided rightReport then 0 else getConsecutiveSaves (getPlayer2 gameState)
       gameState' = gameState { getBall = b4
-                             , getPlayer1 = incrScore score1Incr (getPlayer1 gameState)
-                             , getPlayer2 = incrScore score2Incr (getPlayer2 gameState)
-                             , getConsecutiveSaves1 = consecutiveSaves1
-                             , getConsecutiveSaves2 = consecutiveSaves2
+                             , getPlayer1 = (incrScore score1Incr . setConsecutiveSaves saves1) (getPlayer1 gameState)
+                             , getPlayer2 = (incrScore score2Incr . setConsecutiveSaves saves2) (getPlayer2 gameState)
                              }
   in gameState'
 
@@ -311,10 +310,14 @@ ballPaddleCollision :: GameState -> GameState
 ballPaddleCollision gameState =
   let paddle1Collision = checkCollision (paddleToObject (getPaddle1 gameState)) (ballToObject (getBall gameState))
       paddle2Collision = checkCollision (paddleToObject (getPaddle2 gameState)) (ballToObject (getBall gameState))
+      saves1 = if isCollided paddle1Collision then getConsecutiveSaves (getPlayer1 gameState) + 1 else getConsecutiveSaves (getPlayer1 gameState)
+      saves2 = if isCollided paddle2Collision then getConsecutiveSaves (getPlayer2 gameState) + 1 else getConsecutiveSaves (getPlayer2 gameState)
       gameState1 = gameState { getBall = updateBallStateInCollision paddle1Collision (getBall gameState)
-                             , getConsecutiveSaves1 = if isCollided paddle1Collision then getConsecutiveSaves1 gameState + 1 else getConsecutiveSaves1 gameState }
+                             , getPlayer1 = setConsecutiveSaves saves1 (getPlayer1 gameState)
+                             }
       gameState2 = gameState1 { getBall = updateBallStateInCollision paddle2Collision (getBall gameState1)
-                              , getConsecutiveSaves2 = if isCollided paddle2Collision then getConsecutiveSaves2 gameState1 + 1 else getConsecutiveSaves2 gameState1 }
+                              , getPlayer2 = setConsecutiveSaves saves2 (getPlayer2 gameState1)
+                              }
   in gameState2
 
 toCInt :: Int -> CInt
@@ -376,15 +379,16 @@ suddenDeath gs = getTimeRemainingSecs gs <= 0 && getScore (getPlayer1 gs) == get
 
 determinePowers :: GameState -> GameState
 determinePowers gameState =
-  let gameState1 = if getConsecutiveSaves1 gameState >= 4 && getPower1 gameState == NoPower
-                     then gameState { getConsecutiveSaves1 = 0, getPower1 = Speed }
+  let player1 = getPlayer1 gameState
+      player2 = getPlayer2 gameState
+      gameState1 = if getConsecutiveSaves player1 >= 4 && getPower player1 == NoPower
+                     then gameState { getPlayer1 = player1 { getConsecutiveSaves = 0, getPower = Speed } }
                      else gameState
-      gameState2 = if getConsecutiveSaves2 gameState1 >= 4 && getPower2 gameState1 == NoPower
-                     then gameState1 { getConsecutiveSaves2 = 0, getPower2 = Speed }
+      gameState2 = if getConsecutiveSaves player2 >= 4 && getPower player2 == NoPower
+                     then gameState1 { getPlayer2 = player2 { getConsecutiveSaves = 0, getPower = Speed } }
                      else gameState1
   in gameState2
 
--- TODO refactor this ugly mess
 activatePower :: (SDL.Scancode -> Bool) -> GameState -> GameState
 activatePower keyMap gs =
   let gs1 = if getPower1 gs /= NoPower && keyMap SDL.ScancodeD
@@ -585,8 +589,6 @@ main = do
         , getPowerActive2 = NoPower
         , getPowerActiveRemSecs1 = 0.0
         , getPowerActiveRemSecs2 = 0.0
-        , getConsecutiveSaves1 = 0
-        , getConsecutiveSaves2 = 0
         , getTimeRemainingSecs = 90
         , getFps = 0
         , getAccumulatedTimeSecs = 0.0
