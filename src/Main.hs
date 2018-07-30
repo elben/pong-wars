@@ -61,15 +61,15 @@ data GameState = GameState
   , getBall :: Ball
   , getPaddle1 :: Paddle
   , getPaddle2 :: Paddle
-  , getPlayer1 :: Player
-  , getPlayer2 :: Player
+  , getPlayer1 :: PlayerData
+  , getPlayer2 :: PlayerData
   , getTimeRemainingSecs :: Double
   , getFps :: Integer
   , getAccumulatedTimeSecs :: Double
   }
   deriving Show
 
-data Player = Player
+data PlayerData = PlayerData
   { getScore :: Int
   , getPower :: Power
   , getPowerActive :: Power
@@ -78,10 +78,10 @@ data Player = Player
   }
   deriving Show
 
-incrScore :: Int -> Player -> Player
+incrScore :: Int -> PlayerData -> PlayerData
 incrScore incr pd = pd { getScore = getScore pd + incr }
 
-setConsecutiveSaves :: Int -> Player -> Player
+setConsecutiveSaves :: Int -> PlayerData -> PlayerData
 setConsecutiveSaves n pd = pd { getConsecutiveSaves = n }
 
 -- A Paddle state consist of its position, which represents the center of the
@@ -566,7 +566,7 @@ main = do
             , getPaddleHeading = 0
             }
         , getPlayer1 =
-            Player
+            PlayerData
             { getScore = 0
             , getPower = Speed
             , getPowerActive = NoPower
@@ -574,7 +574,7 @@ main = do
             , getConsecutiveSaves = 0
             }
         , getPlayer2 =
-            Player
+            PlayerData
             { getScore = 0
             , getPower = NoPower
             , getPowerActive = NoPower
