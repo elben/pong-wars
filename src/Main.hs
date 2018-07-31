@@ -78,6 +78,28 @@ data PlayerData = PlayerData
   }
   deriving Show
 
+data Player = P1 | P2
+
+getPlayer :: Player -> GameState -> PlayerData
+getPlayer p gs =
+  case p of
+    P1 -> getPlayer1 gs
+    P2 -> getPlayer2 gs
+
+setPlayer :: Player -> PlayerData -> GameState -> GameState
+setPlayer p pd gs =
+  case p of
+    P1 -> gs { getPlayer1 = pd }
+    P2 -> gs { getPlayer2 = pd }
+
+-- Modify the given Player's PlayerData, given a mapping function and GameState.
+mapPlayer :: Player -> (PlayerData -> PlayerData) -> GameState -> GameState
+mapPlayer p f gs = setPlayer p (f (getPlayer p gs)) gs
+
+-- Modify each player's PlayerData, given a mapping function and GameState.
+mapPlayers :: (PlayerData -> PlayerData) -> GameState -> GameState
+mapPlayers f gs = (mapPlayer P1 f . mapPlayer P2 f) gs
+
 incrScore :: Int -> PlayerData -> PlayerData
 incrScore incr pd = pd { getScore = getScore pd + incr }
 
@@ -369,22 +391,16 @@ movePaddleState paddleKeyMap keyMap paddle =
     Nothing -> paddleStop paddle
 
 suddenDeath :: GameState -> Bool
-suddenDeath gs = getTimeRemainingSecs gs <= 0 && getScore (getPlayer1 gs) == getScore (getPlayer2 gs)
+suddenDeath gs = getTimeRemainingSecs gs <= 0 && getScore (getPlayer P1 gs) == getScore (getPlayer P2 gs)
 
 determinePowers :: GameState -> GameState
-determinePowers gameState =
-  let player1 = getPlayer1 gameState
-      player2 = getPlayer2 gameState
-      gameState1 = if getConsecutiveSaves player1 >= 4 && getPower player1 == NoPower
-                     then gameState { getPlayer1 = player1 { getConsecutiveSaves = 0, getPower = Speed } }
-                     else gameState
-      gameState2 = if getConsecutiveSaves player2 >= 4 && getPower player2 == NoPower
-                     then gameState1 { getPlayer2 = player2 { getConsecutiveSaves = 0, getPower = Speed } }
-                     else gameState1
-  in gameState2
+determinePowers gs =
+  let speedCheck = \p -> if getConsecutiveSaves p >= 4 && getPower p == NoPower then p { getConsecutiveSaves = 0, getPower = Speed } else p
+  in mapPlayers speedCheck gs
 
 activatePower :: (SDL.Scancode -> Bool) -> GameState -> GameState
 activatePower keyMap gs =
+      -- Activate powers for player 1
   let gs1 = if getPower (getPlayer1 gs) /= NoPower && keyMap SDL.ScancodeD
               then gs { getPlayer1 =
                           (getPlayer1 gs)
@@ -392,6 +408,8 @@ activatePower keyMap gs =
                           , getPowerActive = getPower (getPlayer1 gs)
                           , getPowerActiveRemSecs = secondsInPower (getPower (getPlayer1 gs)) } }
               else gs
+
+      -- Activate powers for player 2
       gs2 = if getPower (getPlayer2 gs1) /= NoPower && keyMap SDL.ScancodeLeft
               then gs1 { getPlayer2 =
                           (getPlayer2 gs1)
@@ -479,7 +497,6 @@ renderAndFlip renderer f = do
 
   -- Flip the buffer and render!
   SDL.present renderer
-
 
 main :: IO ()
 main = do
@@ -641,7 +658,7 @@ main = do
             return gameState1
 
           Winner -> do
-            let texture = if getScore (getPlayer1 gameState) > getScore (getPlayer2 gameState)
+            let texture = if getScore (getPlayer P1 gameState) > getScore (getPlayer P2 gameState)
                           then textureWinnerBlue
                           else textureWinnerPink
 
@@ -684,8 +701,8 @@ main = do
                   else renderTextAlign renderer mediumFont fontColorWhite (400, 20) AlignCenter AlignTop $
                          (T.pack $ show (floor (getTimeRemainingSecs simulatedGameState) :: Integer))
 
-                renderText renderer mediumFont fontColorWhite (20, 20) (T.pack $ show (getScore (getPlayer1 simulatedGameState)))
-                renderTextAlign renderer mediumFont fontColorWhite (780, 20) AlignRight AlignTop (T.pack $ show (getScore (getPlayer2 simulatedGameState)))
+                renderText renderer mediumFont fontColorWhite (20, 20) (T.pack $ show (getScore (getPlayer P1 simulatedGameState)))
+                renderTextAlign renderer mediumFont fontColorWhite (780, 20) AlignRight AlignTop (T.pack $ show (getScore (getPlayer P2 simulatedGameState)))
 
                 when (getPower (getPlayer1 simulatedGameState) /= NoPower) $
                   renderTextAlign renderer smallFont fontColorWhite (30, 570) AlignLeft AlignBottom (showPower (getPower (getPlayer1 simulatedGameState)))
