@@ -75,6 +75,11 @@ data PlayerData = PlayerData
   , getPowerActive :: Power
   , getPowerActiveRemSecs :: Double  -- Seconds remaining for player's power
   , getConsecutiveSaves :: Int
+
+  -- Keys being pressed
+  , getUpKeyPressed :: Bool
+  , getDownKeyPressed :: Bool
+  , getPowerKeyPressed :: Bool
   }
   deriving Show
 
@@ -97,8 +102,8 @@ mapPlayer :: Player -> (PlayerData -> PlayerData) -> GameState -> GameState
 mapPlayer p f gs = setPlayer p (f (getPlayer p gs)) gs
 
 -- Modify each player's PlayerData, given a mapping function and GameState.
-mapPlayers :: (PlayerData -> PlayerData) -> GameState -> GameState
-mapPlayers f gs = (mapPlayer P1 f . mapPlayer P2 f) gs
+foldPlayers :: (PlayerData -> PlayerData) -> GameState -> GameState
+foldPlayers f gs = (mapPlayer P1 f . mapPlayer P2 f) gs
 
 incrScore :: Int -> PlayerData -> PlayerData
 incrScore incr pd = pd { getScore = getScore pd + incr }
@@ -396,27 +401,19 @@ suddenDeath gs = getTimeRemainingSecs gs <= 0 && getScore (getPlayer P1 gs) == g
 determinePowers :: GameState -> GameState
 determinePowers gs =
   let speedCheck = \p -> if getConsecutiveSaves p >= 4 && getPower p == NoPower then p { getConsecutiveSaves = 0, getPower = Speed } else p
-  in mapPlayers speedCheck gs
+  in foldPlayers speedCheck gs
 
-activatePower :: (SDL.Scancode -> Bool) -> GameState -> GameState
-activatePower keyMap gs =
-      -- Activate powers for player 1
-  let gs1 = if getPower (getPlayer1 gs) /= NoPower && keyMap SDL.ScancodeD
-              then gs { getPlayer1 =
-                          (getPlayer1 gs)
-                          { getPower = NoPower
-                          , getPowerActive = getPower (getPlayer1 gs)
-                          , getPowerActiveRemSecs = secondsInPower (getPower (getPlayer1 gs)) } }
-              else gs
+-- TODO refactor this mess!
+activatePower :: GameState -> GameState
+activatePower gs =
+  let activate = \p -> if getPowerKeyPressed p && getPower p /= NoPower
+                       then p { getPower = NoPower
+                              , getPowerActive = getPower p
+                              , getPowerActiveRemSecs = secondsInPower (getPower p)
+                              }
+                       else p
 
-      -- Activate powers for player 2
-      gs2 = if getPower (getPlayer2 gs1) /= NoPower && keyMap SDL.ScancodeLeft
-              then gs1 { getPlayer2 =
-                          (getPlayer2 gs1)
-                          { getPower = NoPower
-                          , getPowerActive = getPower (getPlayer2 gs1)
-                          , getPowerActiveRemSecs = secondsInPower (getPower (getPlayer2 gs1)) } }
-              else gs1
+      gs2 = foldPlayers activate gs
 
       -- Activate Speed if needed
       gs3 = if (getPowerActive (getPlayer1 gs) /= Speed && getPowerActive (getPlayer1 gs2) == Speed) ||
@@ -477,15 +474,25 @@ simulationLoop keyMap gameState =
         gameState7 = paddleWallCollision gameState6
         gameState8 = ballPaddleCollision gameState7
 
-        gameState9 = (determinePowers . activatePower keyMap) gameState8
+        gameState9 = (determinePowers . activatePower) gameState8
 
         gameState10 = gameState9 { getAccumulatedTimeSecs = getAccumulatedTimeSecs gameState9 - dt }
 
     in simulationLoop keyMap gameState10
   else gameState
 
--- Make game end when game clock hits 0.
--- If tied, sudden death mode.
+registerKeyPresses :: (SDL.Scancode -> Bool) -> GameState -> GameState
+registerKeyPresses keyMap gs =
+  let p1 = (getPlayer P1 gs)
+             { getUpKeyPressed = keyMap SDL.ScancodeW
+             , getDownKeyPressed = keyMap SDL.ScancodeS
+             , getPowerKeyPressed = keyMap SDL.ScancodeD }
+      p2 = (getPlayer P2 gs)
+             { getUpKeyPressed = keyMap SDL.ScancodeUp
+             , getDownKeyPressed = keyMap SDL.ScancodeDown
+             , getPowerKeyPressed = keyMap SDL.ScancodeLeft }
+  in gs { getPlayer1 = p1
+        , getPlayer2 = p2 }
 
 renderAndFlip :: Renderer -> IO () -> IO ()
 renderAndFlip renderer f = do
@@ -589,6 +596,9 @@ main = do
             , getPowerActive = NoPower
             , getPowerActiveRemSecs = 0.0
             , getConsecutiveSaves = 0
+            , getUpKeyPressed = False
+            , getDownKeyPressed = False
+            , getPowerKeyPressed = False
             }
         , getPlayer2 =
             PlayerData
@@ -597,6 +607,9 @@ main = do
             , getPowerActive = NoPower
             , getPowerActiveRemSecs = 0.0
             , getConsecutiveSaves = 0
+            , getUpKeyPressed = False
+            , getDownKeyPressed = False
+            , getPowerKeyPressed = False
             }
         , getTimeRemainingSecs = 90
         , getFps = 0
@@ -684,7 +697,7 @@ main = do
             else do
               loopStartTime <- Clock.getTime Clock.Monotonic
 
-              let simulatedGameState = simulationLoop keyMap gameState
+              let simulatedGameState = simulationLoop keyMap (registerKeyPresses keyMap gameState)
 
               -- Press "P" to spit out debugging info.
               when (keyMap SDL.ScancodeP) (print simulatedGameState)
