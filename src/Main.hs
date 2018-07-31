@@ -61,15 +61,15 @@ data GameState = GameState
   , getBall :: Ball
   , getPaddle1 :: Paddle
   , getPaddle2 :: Paddle
-  , getPlayer1 :: PlayerData
-  , getPlayer2 :: PlayerData
+  , getPlayer1 :: PlayerState
+  , getPlayer2 :: PlayerState
   , getTimeRemainingSecs :: Double
   , getFps :: Integer
   , getAccumulatedTimeSecs :: Double
   }
   deriving Show
 
-data PlayerData = PlayerData
+data PlayerState = PlayerState
   { getScore :: Int
   , getPower :: Power
   , getPowerActive :: Power
@@ -85,30 +85,30 @@ data PlayerData = PlayerData
 
 data Player = P1 | P2
 
-getPlayer :: Player -> GameState -> PlayerData
+getPlayer :: Player -> GameState -> PlayerState
 getPlayer p gs =
   case p of
     P1 -> getPlayer1 gs
     P2 -> getPlayer2 gs
 
-setPlayer :: Player -> PlayerData -> GameState -> GameState
+setPlayer :: Player -> PlayerState -> GameState -> GameState
 setPlayer p pd gs =
   case p of
     P1 -> gs { getPlayer1 = pd }
     P2 -> gs { getPlayer2 = pd }
 
--- Modify the given Player's PlayerData, given a mapping function and GameState.
-mapPlayer :: Player -> (PlayerData -> PlayerData) -> GameState -> GameState
+-- Modify the given Player's PlayerState, given a mapping function and GameState.
+mapPlayer :: Player -> (PlayerState -> PlayerState) -> GameState -> GameState
 mapPlayer p f gs = setPlayer p (f (getPlayer p gs)) gs
 
--- Modify each player's PlayerData, given a mapping function and GameState.
-foldPlayers :: (PlayerData -> PlayerData) -> GameState -> GameState
+-- Modify each player's PlayerState, given a mapping function and GameState.
+foldPlayers :: (PlayerState -> PlayerState) -> GameState -> GameState
 foldPlayers f gs = (mapPlayer P1 f . mapPlayer P2 f) gs
 
-incrScore :: Int -> PlayerData -> PlayerData
+incrScore :: Int -> PlayerState -> PlayerState
 incrScore incr pd = pd { getScore = getScore pd + incr }
 
-setConsecutiveSaves :: Int -> PlayerData -> PlayerData
+setConsecutiveSaves :: Int -> PlayerState -> PlayerState
 setConsecutiveSaves n pd = pd { getConsecutiveSaves = n }
 
 -- A Paddle state consist of its position, which represents the center of the
@@ -590,7 +590,7 @@ main = do
             , getPaddleHeading = 0
             }
         , getPlayer1 =
-            PlayerData
+            PlayerState
             { getScore = 0
             , getPower = Speed
             , getPowerActive = NoPower
@@ -601,7 +601,7 @@ main = do
             , getPowerKeyPressed = False
             }
         , getPlayer2 =
-            PlayerData
+            PlayerState
             { getScore = 0
             , getPower = NoPower
             , getPowerActive = NoPower
