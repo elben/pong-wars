@@ -546,9 +546,8 @@ main = do
 
   Mix.openAudio Mix.defaultAudio 512
 
-  musicMenuF <- BS.readFile "resources/audio/purple-planet/Slipstream.ogg"
-  decoded <- Mix.decode musicMenuF
-  Mix.playMusic Mix.Forever decoded
+  chunk <- Mix.load "resources/audio/purple-planet/Slipstream.ogg"
+  Mix.playForever chunk
 
   let
     startingGameState =
@@ -764,7 +763,7 @@ main = do
 
   SDL.destroyWindow window
   Font.quit
-  Mix.free decoded
+  Mix.free chunk
   Mix.closeAudio
   SDL.quit
 
