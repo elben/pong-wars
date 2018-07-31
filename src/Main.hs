@@ -92,10 +92,10 @@ getPlayer p gs =
     P2 -> getPlayer2 gs
 
 setPlayer :: Player -> PlayerState -> GameState -> GameState
-setPlayer p pd gs =
+setPlayer p ps gs =
   case p of
-    P1 -> gs { getPlayer1 = pd }
-    P2 -> gs { getPlayer2 = pd }
+    P1 -> gs { getPlayer1 = ps }
+    P2 -> gs { getPlayer2 = ps }
 
 -- Modify the given Player's PlayerState, given a mapping function and GameState.
 mapPlayer :: Player -> (PlayerState -> PlayerState) -> GameState -> GameState
@@ -105,11 +105,15 @@ mapPlayer p f gs = setPlayer p (f (getPlayer p gs)) gs
 foldPlayers :: (PlayerState -> PlayerState) -> GameState -> GameState
 foldPlayers f gs = (mapPlayer P1 f . mapPlayer P2 f) gs
 
+-- Run the given function, which modifies the GameState, for each player.
+foldPlayersOver :: (Player -> GameState -> GameState) -> GameState -> GameState
+foldPlayersOver f gs = (f P1 . f P2) gs
+
 incrScore :: Int -> PlayerState -> PlayerState
-incrScore incr pd = pd { getScore = getScore pd + incr }
+incrScore incr ps = ps { getScore = getScore ps + incr }
 
 setConsecutiveSaves :: Int -> PlayerState -> PlayerState
-setConsecutiveSaves n pd = pd { getConsecutiveSaves = n }
+setConsecutiveSaves n ps = ps { getConsecutiveSaves = n }
 
 -- A Paddle state consist of its position, which represents the center of the
 -- paddle, and the half-width/height dimensions.
@@ -406,14 +410,17 @@ determinePowers gs =
 -- TODO refactor this mess!
 activatePower :: GameState -> GameState
 activatePower gs =
-  let activate p = if getPowerKeyPressed p && getPower p /= NoPower
-                   then p { getPower = NoPower
-                          , getPowerActive = getPower p
-                          , getPowerActiveRemSecs = secondsInPower (getPower p)
-                          }
-                   else p
+  let activate ps = if getPowerKeyPressed ps && getPower ps /= NoPower
+                    then ps { getPower = NoPower
+                           , getPowerActive = getPower ps
+                           , getPowerActiveRemSecs = secondsInPower (getPower ps)
+                           }
+                    else ps
 
       gs2 = foldPlayers activate gs
+
+      -- TODO the outcomes here is that the GameState is modified (not just
+      -- PlayerState)
 
       -- Activate Speed if needed
       gs3 = if (getPowerActive (getPlayer1 gs) /= Speed && getPowerActive (getPlayer1 gs2) == Speed) ||
@@ -423,24 +430,17 @@ activatePower gs =
               in gs2 { getBall = ball { getBallVelocity = ballVelocitySpeed } }
             else gs2
 
-      -- De-activate Speed if needed (player 1)
-      gs4 = if getPowerActive (getPlayer1 gs3) == Speed && getPowerActiveRemSecs (getPlayer1 gs3) <= 0
-            then
-              let ball = getBall gs3
-              in gs3 { getBall = ball { getBallVelocity = ballVelocityNormal }
-                     , getPlayer1 = (getPlayer1 gs3) { getPowerActive = NoPower }
-                     }
-            else gs3
+      deactivateSpeed p gs' =
+        if getPowerActive (getPlayer p gs') == Speed && getPowerActiveRemSecs (getPlayer p gs') <= 0
+        then
+          let ball = getBall gs'
+              gs1' = gs' { getBall = ball { getBallVelocity = ballVelocityNormal } }
+          in setPlayer p ((getPlayer p gs1') { getPowerActive = NoPower }) gs1'
+        else gs'
 
-      -- De-activate Speed if needed (player 2)
-      gs5 = if getPowerActive (getPlayer2 gs4) == Speed && getPowerActiveRemSecs (getPlayer2 gs4) <= 0
-            then
-              let ball = getBall gs4
-              in gs4 { getBall = ball { getBallVelocity = ballVelocityNormal }
-                     , getPlayer2 = (getPlayer2 gs4) { getPowerActive = NoPower }
-                     }
-            else gs4
-  in gs5
+      -- De-activate Speed if needed
+      gs4 = foldPlayersOver deactivateSpeed gs3
+  in gs4
 
 -- The render (below) "produces" time, and the simulation "consumes"
 -- time. Keep on looping until the simulation has consumed all (with
