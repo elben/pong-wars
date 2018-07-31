@@ -400,18 +400,18 @@ suddenDeath gs = getTimeRemainingSecs gs <= 0 && getScore (getPlayer P1 gs) == g
 
 determinePowers :: GameState -> GameState
 determinePowers gs =
-  let speedCheck = \p -> if getConsecutiveSaves p >= 4 && getPower p == NoPower then p { getConsecutiveSaves = 0, getPower = Speed } else p
+  let speedCheck p = if getConsecutiveSaves p >= 4 && getPower p == NoPower then p { getConsecutiveSaves = 0, getPower = Speed } else p
   in foldPlayers speedCheck gs
 
 -- TODO refactor this mess!
 activatePower :: GameState -> GameState
 activatePower gs =
-  let activate = \p -> if getPowerKeyPressed p && getPower p /= NoPower
-                       then p { getPower = NoPower
-                              , getPowerActive = getPower p
-                              , getPowerActiveRemSecs = secondsInPower (getPower p)
-                              }
-                       else p
+  let activate p = if getPowerKeyPressed p && getPower p /= NoPower
+                   then p { getPower = NoPower
+                          , getPowerActive = getPower p
+                          , getPowerActiveRemSecs = secondsInPower (getPower p)
+                          }
+                   else p
 
       gs2 = foldPlayers activate gs
 
