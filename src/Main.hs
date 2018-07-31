@@ -109,6 +109,9 @@ foldPlayers f gs = (mapPlayer P1 f . mapPlayer P2 f) gs
 foldPlayersOver :: (Player -> GameState -> GameState) -> GameState -> GameState
 foldPlayersOver f gs = (f P1 . f P2) gs
 
+allPlayers :: (PlayerState -> Bool) -> GameState -> Bool
+allPlayers f gs = f (getPlayer P1 gs) && f (getPlayer P2 gs)
+
 incrScore :: Int -> PlayerState -> PlayerState
 incrScore incr ps = ps { getScore = getScore ps + incr }
 
@@ -407,40 +410,34 @@ determinePowers gs =
   let speedCheck p = if getConsecutiveSaves p >= 4 && getPower p == NoPower then p { getConsecutiveSaves = 0, getPower = Speed } else p
   in foldPlayers speedCheck gs
 
--- TODO refactor this mess!
 activatePower :: GameState -> GameState
 activatePower gs =
   let activate ps = if getPowerKeyPressed ps && getPower ps /= NoPower
                     then ps { getPower = NoPower
-                           , getPowerActive = getPower ps
-                           , getPowerActiveRemSecs = secondsInPower (getPower ps)
-                           }
+                            , getPowerActive = getPower ps
+                            , getPowerActiveRemSecs = secondsInPower (getPower ps)
+                            }
                     else ps
 
+      -- The players activating their power
       gs2 = foldPlayers activate gs
 
-      -- TODO the outcomes here is that the GameState is modified (not just
-      -- PlayerState)
-
-      -- Activate Speed if needed
-      gs3 = if (getPowerActive (getPlayer1 gs) /= Speed && getPowerActive (getPlayer1 gs2) == Speed) ||
-               (getPowerActive (getPlayer2 gs) /= Speed && getPowerActive (getPlayer2 gs2) == Speed)
-            then
-              let ball = getBall gs2
-              in gs2 { getBall = ball { getBallVelocity = ballVelocitySpeed } }
-            else gs2
-
+      -- De-activate Speed for player's active power, if needed
       deactivateSpeed p gs' =
         if getPowerActive (getPlayer p gs') == Speed && getPowerActiveRemSecs (getPlayer p gs') <= 0
-        then
-          let ball = getBall gs'
-              gs1' = gs' { getBall = ball { getBallVelocity = ballVelocityNormal } }
-          in setPlayer p ((getPlayer p gs1') { getPowerActive = NoPower }) gs1'
+        then setPlayer p ((getPlayer p gs') { getPowerActive = NoPower }) gs'
         else gs'
 
-      -- De-activate Speed if needed
-      gs4 = foldPlayersOver deactivateSpeed gs3
-  in gs4
+      gs3 = foldPlayersOver deactivateSpeed gs2
+
+      -- Set ball speed to fast if a player has Speed; otherwise set it to
+      -- normal.
+      ballVel = if allPlayers (\p -> getPowerActive p /= Speed) gs3
+                then ballVelocityNormal
+                else ballVelocitySpeed
+
+  in gs3 { getBall = (getBall gs3) { getBallVelocity = ballVel } }
+
 
 -- The render (below) "produces" time, and the simulation "consumes"
 -- time. Keep on looping until the simulation has consumed all (with
@@ -603,7 +600,7 @@ main = do
         , getPlayer2 =
             PlayerState
             { getScore = 0
-            , getPower = NoPower
+            , getPower = Speed
             , getPowerActive = NoPower
             , getPowerActiveRemSecs = 0.0
             , getConsecutiveSaves = 0
