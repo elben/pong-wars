@@ -19,6 +19,16 @@ stack build && stack exec pong-wars
 stack test
 ```
 
+To use Brittany code formatter:
+
+```
+cd ~/
+stack install brittany
+```
+
+I use the [Neoformat](https://github.com/sbdchd/neoformat) vim plugin, with the
+vim command `:Neoformat`.
+
 # Resources
 
 http://lazyfoo.net/tutorials/SDL/index.php
