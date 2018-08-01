@@ -11,8 +11,6 @@ import Prelude hiding (any, mapM_)
 import SDL (($=))
 import SDL.Vect
 import SDL.Video.Renderer
-import qualified Data.ByteString as BS
-import qualified Data.List as L
 import qualified Data.Text as T
 import qualified SDL
 import qualified SDL.Font as Font
@@ -59,8 +57,6 @@ dt = 0.001
 data GameState = GameState
   { getScreen :: Screen
   , getBall :: Ball
-  , getPaddle1 :: Paddle
-  , getPaddle2 :: Paddle
   , getPlayer1 :: PlayerState
   , getPlayer2 :: PlayerState
   , getTimeRemainingSecs :: Double
@@ -71,6 +67,7 @@ data GameState = GameState
 
 data PlayerState = PlayerState
   { getScore :: Int
+  , getPaddle :: Paddle
   , getPower :: Power
   , getPowerActive :: Power
   , getPowerActiveRemSecs :: Double  -- Seconds remaining for player's power
@@ -111,6 +108,12 @@ foldPlayersOver f gs = (f P1 . f P2) gs
 
 allPlayers :: (PlayerState -> Bool) -> GameState -> Bool
 allPlayers f gs = f (getPlayer P1 gs) && f (getPlayer P2 gs)
+
+setPaddle :: Player -> Paddle -> GameState -> GameState
+setPaddle p paddle gs =
+  case p of
+    P1 -> gs { getPlayer1 = (getPlayer1 gs) { getPaddle = paddle } }
+    P2 -> gs { getPlayer2 = (getPlayer2 gs) { getPaddle = paddle } }
 
 incrScore :: Int -> PlayerState -> PlayerState
 incrScore incr ps = ps { getScore = getScore ps + incr }
@@ -164,6 +167,12 @@ ballVelocityNormal = 500
 ballVelocitySpeed :: Double
 ballVelocitySpeed = 700
 
+paddleVelocityNormal :: Double
+paddleVelocityNormal = 600.0
+
+paddleVelocitySlow :: Double
+paddleVelocitySlow = 400.0
+
 massWall :: Mass
 massWall = 100
 
@@ -190,9 +199,6 @@ wallLeft = AABB massWall (-50, maxHeight / 2) 50 (maxHeight / 2 + 1)
 
 wallRight :: Object
 wallRight = AABB massWall (maxWidth + 50, maxHeight / 2) 50 (maxHeight / 2 + 1)
-
-paddleVelocity :: Double
-paddleVelocity = 600.0
 
 -- | Normalize heading into the range of [0, 1)
 normalizeHeading :: Double -> Double
@@ -221,7 +227,7 @@ updatePaddle paddle =
   in paddle { getPaddlePos = (x', y') }
 
 paddleMove :: Double -> Paddle -> Paddle
-paddleMove a p = p { getPaddleVelocity = paddleVelocity, getPaddleHeading = a }
+paddleMove a p = p { getPaddleVelocity = paddleVelocityNormal, getPaddleHeading = a }
 
 paddleStop :: Paddle -> Paddle
 paddleStop p = p { getPaddleVelocity = 0, getPaddleHeading = 0.0 }
@@ -280,24 +286,24 @@ ballWallCollision gameState =
 
 paddleWallCollision :: GameState -> GameState
 paddleWallCollision gameState =
-  let topReport1 = checkCollision wallTop (paddleToObject (getPaddle1 gameState))
-      bottomReport1 = checkCollision wallBottom (paddleToObject (getPaddle1 gameState))
-      rightReport1 = checkCollision wallRight (paddleToObject (getPaddle1 gameState))
-      leftReport1 = checkCollision wallLeft (paddleToObject (getPaddle1 gameState))
-      p11 = updatePaddleStateInCollision topReport1 (getPaddle1 gameState)
+  let topReport1 = checkCollision wallTop (paddleToObject (getPaddle (getPlayer P1 gameState)))
+      bottomReport1 = checkCollision wallBottom (paddleToObject (getPaddle (getPlayer P1 gameState)))
+      rightReport1 = checkCollision wallRight (paddleToObject (getPaddle (getPlayer P1 gameState)))
+      leftReport1 = checkCollision wallLeft (paddleToObject (getPaddle (getPlayer P1 gameState)))
+      p11 = updatePaddleStateInCollision topReport1 (getPaddle (getPlayer P1 gameState))
       p12 = updatePaddleStateInCollision bottomReport1 p11
       p13 = updatePaddleStateInCollision rightReport1 p12
       p14 = updatePaddleStateInCollision leftReport1 p13
 
-      topReport2 = checkCollision wallTop (paddleToObject (getPaddle2 gameState))
-      bottomReport2 = checkCollision wallBottom (paddleToObject (getPaddle2 gameState))
-      rightReport2 = checkCollision wallRight (paddleToObject (getPaddle2 gameState))
-      leftReport2 = checkCollision wallLeft (paddleToObject (getPaddle2 gameState))
-      p21 = updatePaddleStateInCollision topReport2 (getPaddle2 gameState)
+      topReport2 = checkCollision wallTop (paddleToObject (getPaddle (getPlayer P2 gameState)))
+      bottomReport2 = checkCollision wallBottom (paddleToObject (getPaddle (getPlayer P2 gameState)))
+      rightReport2 = checkCollision wallRight (paddleToObject (getPaddle (getPlayer P2 gameState)))
+      leftReport2 = checkCollision wallLeft (paddleToObject (getPaddle (getPlayer P2 gameState)))
+      p21 = updatePaddleStateInCollision topReport2 (getPaddle (getPlayer P2 gameState))
       p22 = updatePaddleStateInCollision bottomReport2 p21
       p23 = updatePaddleStateInCollision rightReport2 p22
       p24 = updatePaddleStateInCollision leftReport2 p23
-  in gameState { getPaddle1 = p14, getPaddle2 = p24 }
+  in (setPaddle P1 p14 . setPaddle P2 p24) gameState
 
 updatePaddleStateInCollision :: Report -> Paddle -> Paddle
 updatePaddleStateInCollision report paddle =
@@ -336,8 +342,8 @@ updateBallStateInCollision report ball =
 
 ballPaddleCollision :: GameState -> GameState
 ballPaddleCollision gameState =
-  let paddle1Collision = checkCollision (paddleToObject (getPaddle1 gameState)) (ballToObject (getBall gameState))
-      paddle2Collision = checkCollision (paddleToObject (getPaddle2 gameState)) (ballToObject (getBall gameState))
+  let paddle1Collision = checkCollision (paddleToObject (getPaddle (getPlayer P1 gameState))) (ballToObject (getBall gameState))
+      paddle2Collision = checkCollision (paddleToObject (getPaddle (getPlayer P2 gameState))) (ballToObject (getBall gameState))
       saves1 = if isCollided paddle1Collision then getConsecutiveSaves (getPlayer1 gameState) + 1 else getConsecutiveSaves (getPlayer1 gameState)
       saves2 = if isCollided paddle2Collision then getConsecutiveSaves (getPlayer2 gameState) + 1 else getConsecutiveSaves (getPlayer2 gameState)
       gameState1 = gameState { getBall = updateBallStateInCollision paddle1Collision (getBall gameState)
@@ -374,14 +380,12 @@ renderText :: Renderer -> Font.Font -> Font.Color -> (Int, Int) -> T.Text -> IO 
 renderText renderer font color pos =
   renderTextAlign renderer font color pos AlignLeft AlignTop
 
-type PaddleKeyMap = [([SDL.Scancode], Paddle -> Paddle)]
-
 -- Possibly modify game state, or use the last one. Check if a key is
 -- pressed down, and do the state modification.
-movePaddleState :: PlayerState -- ^ The player whose paddle is being moved
-                -> Paddle      -- ^ Current paddle state
-                -> Paddle      -- ^ Returns new paddle state
-movePaddleState ps paddle =
+movePaddle :: PlayerState -- ^ The player whose paddle is being moved
+           -> Paddle      -- ^ Current paddle state
+           -> Paddle      -- ^ Returns new paddle state
+movePaddle ps paddle =
   if | getUpKeyPressed ps -> paddleMove 0.75 paddle
      | getDownKeyPressed ps -> paddleMove 0.25 paddle
      | otherwise -> paddleStop paddle
@@ -393,6 +397,20 @@ determinePowers :: GameState -> GameState
 determinePowers gs =
   let speedCheck p = if getConsecutiveSaves p >= 4 && getPower p == NoPower then p { getConsecutiveSaves = 0, getPower = Speed } else p
   in foldPlayers speedCheck gs
+
+
+-- De-activate Speed for player's active power, if needed
+deactivateSpeed :: Player -> GameState -> GameState
+deactivateSpeed p gs =
+  if getPowerActive (getPlayer p gs) == Speed && getPowerActiveRemSecs (getPlayer p gs) <= 0
+  then setPlayer p ((getPlayer p gs) { getPowerActive = NoPower }) gs
+  else gs
+
+activateQuagmire :: Player -> GameState -> GameState
+activateQuagmire p gs =
+  if getPowerActive (getPlayer p gs) == Quagmire && getPowerActiveRemSecs (getPlayer p gs) <= 0
+  then gs
+  else gs
 
 activatePower :: GameState -> GameState
 activatePower gs =
@@ -406,11 +424,9 @@ activatePower gs =
       -- The players activating their power
       gs2 = foldPlayers activate gs
 
-      -- De-activate Speed for player's active power, if needed
-      deactivateSpeed p gs' =
-        if getPowerActive (getPlayer p gs') == Speed && getPowerActiveRemSecs (getPlayer p gs') <= 0
-        then setPlayer p ((getPlayer p gs') { getPowerActive = NoPower }) gs'
-        else gs'
+      -----------
+      -- Speed --
+      -----------
 
       gs3 = foldPlayersOver deactivateSpeed gs2
 
@@ -419,6 +435,10 @@ activatePower gs =
       ballVel = if allPlayers (\p -> getPowerActive p /= Speed) gs3
                 then ballVelocityNormal
                 else ballVelocitySpeed
+
+      --------------
+      -- Quagmire --
+      --------------
 
   in gs3 { getBall = (getBall gs3) { getBallVelocity = ballVel } }
 
@@ -440,15 +460,15 @@ simulationLoop gameState =
   then
     -- Possibly modify game state, or use the last one. Check if a key is
     -- pressed down, and do the state modification.
-    let gameState1 = gameState { getPaddle1 = movePaddleState (getPlayer1 gameState) (getPaddle1 gameState)}
-        gameState2 = gameState1 { getPaddle2 = movePaddleState (getPlayer2 gameState) (getPaddle2 gameState1)}
+    let gameState1 = setPaddle P1 (movePaddle (getPlayer1 gameState) (getPaddle (getPlayer P1 gameState))) gameState
+        gameState2 = setPaddle P2 (movePaddle (getPlayer2 gameState) (getPaddle (getPlayer P2 gameState1)))gameState1
 
     -- Update ball position.
         gameState3 = gameState2 { getBall = updateBall (getBall gameState2) }
 
     -- Update paddle positions.
-        gameState4 = gameState3 { getPaddle1 = updatePaddle (getPaddle1 gameState3) }
-        gameState5 = gameState4 { getPaddle2 = updatePaddle (getPaddle2 gameState4) }
+        gameState4 = setPaddle P1 (updatePaddle (getPaddle (getPlayer P1 gameState3))) gameState3
+        gameState5 = setPaddle P2 (updatePaddle (getPaddle (getPlayer P2 gameState4))) gameState4
 
     -- Check for paddle-ball collisions.
         gameState6 = ballWallCollision gameState5
@@ -553,25 +573,17 @@ main = do
             -- ball. Just creates a perfect circle. Need some kind of polynomial shape.
             , getBallSpinVelocity = 0.0001
             }
-        , getPaddle1 =
-            Paddle
-            { getPaddlePos = (20, 300)
-            , getPaddleHalfWidth = 10
-            , getPaddleHalfHeight = 40
-            , getPaddleVelocity = 0
-            , getPaddleHeading = 0
-            }
-        , getPaddle2 =
-            Paddle
-            { getPaddlePos = (780, 300)
-            , getPaddleHalfWidth = 10
-            , getPaddleHalfHeight = 40
-            , getPaddleVelocity = 0
-            , getPaddleHeading = 0
-            }
         , getPlayer1 =
             PlayerState
             { getScore = 0
+            , getPaddle =
+                Paddle
+                { getPaddlePos = (20, 300)
+                , getPaddleHalfWidth = 10
+                , getPaddleHalfHeight = 40
+                , getPaddleVelocity = 0
+                , getPaddleHeading = 0
+                }
             , getPower = Speed
             , getPowerActive = NoPower
             , getPowerActiveRemSecs = 0.0
@@ -583,6 +595,14 @@ main = do
         , getPlayer2 =
             PlayerState
             { getScore = 0
+            , getPaddle =
+                Paddle
+                { getPaddlePos = (780, 300)
+                , getPaddleHalfWidth = 10
+                , getPaddleHalfHeight = 40
+                , getPaddleVelocity = 0
+                , getPaddleHeading = 0
+                }
             , getPower = Speed
             , getPowerActive = NoPower
             , getPowerActiveRemSecs = 0.0
@@ -686,8 +706,8 @@ main = do
                 -- Draw stuff into buffer
                 SDL.copy renderer textureBackground Nothing Nothing
                 SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall simulatedGameState)))
-                SDL.copy renderer texturePaddle1 Nothing (Just (toRectPaddle (getPaddle1 simulatedGameState)))
-                SDL.copy renderer texturePaddle2 Nothing (Just (toRectPaddle (getPaddle2 simulatedGameState)))
+                SDL.copy renderer texturePaddle1 Nothing (Just (toRectPaddle (getPaddle (getPlayer P1 simulatedGameState))))
+                SDL.copy renderer texturePaddle2 Nothing (Just (toRectPaddle (getPaddle (getPlayer P2 simulatedGameState))))
 
                 if suddenDeath simulatedGameState
                   then renderTextAlign renderer mediumFont fontColorWhite (400, 20) AlignCenter AlignTop "Sudden Death!"
