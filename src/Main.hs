@@ -82,6 +82,12 @@ data PlayerState = PlayerState
 
 data Player = P1 | P2
 
+opponent :: Player -> Player
+opponent p =
+  case p of
+    P1 -> P2
+    P2 -> P1
+
 getPlayer :: Player -> GameState -> PlayerState
 getPlayer p gs =
   case p of
@@ -128,6 +134,7 @@ data Paddle = Paddle
   , getPaddleHalfWidth :: Double
   , getPaddleHalfHeight :: Double
   , getPaddleVelocity :: Double
+  , getPaddleMaxVelocity :: Double
   , getPaddleHeading :: Double
   }
   deriving Show
@@ -171,7 +178,7 @@ paddleVelocityNormal :: Double
 paddleVelocityNormal = 600.0
 
 paddleVelocitySlow :: Double
-paddleVelocitySlow = 400.0
+paddleVelocitySlow = 300.0
 
 massWall :: Mass
 massWall = 100
@@ -227,7 +234,7 @@ updatePaddle paddle =
   in paddle { getPaddlePos = (x', y') }
 
 paddleMove :: Double -> Paddle -> Paddle
-paddleMove a p = p { getPaddleVelocity = paddleVelocityNormal, getPaddleHeading = a }
+paddleMove a p = p { getPaddleVelocity = getPaddleMaxVelocity p, getPaddleHeading = a }
 
 paddleStop :: Paddle -> Paddle
 paddleStop p = p { getPaddleVelocity = 0, getPaddleHeading = 0.0 }
@@ -398,49 +405,54 @@ determinePowers gs =
   let speedCheck p = if getConsecutiveSaves p >= 4 && getPower p == NoPower then p { getConsecutiveSaves = 0, getPower = Speed } else p
   in foldPlayers speedCheck gs
 
+-- Activate the Speed power for the given player. Speed increases the ball's
+-- speed.
+applySpeed :: GameState -> GameState
+applySpeed gs =
+  let ballVel = if allPlayers (\p -> getPowerActive p /= Speed) gs
+                then ballVelocityNormal
+                else ballVelocitySpeed
+  in gs { getBall = (getBall gs) { getBallVelocity = ballVel } }
 
--- De-activate Speed for player's active power, if needed
-deactivateSpeed :: Player -> GameState -> GameState
-deactivateSpeed p gs =
-  if getPowerActive (getPlayer p gs) == Speed && getPowerActiveRemSecs (getPlayer p gs) <= 0
-  then setPlayer p ((getPlayer p gs) { getPowerActive = NoPower }) gs
-  else gs
+-- Activate the Quagmire power for the given player. Quagmire decreases the
+-- opponent's paddle speed.
+applyQuagmire :: Player -> GameState -> GameState
+applyQuagmire p gs =
+  if getPowerActive (getPlayer p gs) == Quagmire && getPowerActiveRemSecs (getPlayer p gs) > 0
+  then
+    let ps = getPlayer (opponent p) gs
+        ps' = ps { getPaddle = (getPaddle ps) { getPaddleMaxVelocity = paddleVelocitySlow } }
+    in setPlayer (opponent p) ps' gs
+  else
+    let ps = getPlayer (opponent p) gs
+        ps' = ps { getPaddle = (getPaddle ps) { getPaddleMaxVelocity = paddleVelocityNormal } }
+        gs' = deactivatePower p gs
+    in setPlayer (opponent p) ps' gs'
 
-activateQuagmire :: Player -> GameState -> GameState
-activateQuagmire p gs =
-  if getPowerActive (getPlayer p gs) == Quagmire && getPowerActiveRemSecs (getPlayer p gs) <= 0
-  then gs
-  else gs
+activatePowerForPlayer :: PlayerState -> PlayerState
+activatePowerForPlayer ps =
+  if getPowerKeyPressed ps && getPower ps /= NoPower
+  then ps { getPower = NoPower
+          , getPowerActive = getPower ps
+          , getPowerActiveRemSecs = secondsInPower (getPower ps)
+          }
+  else ps
+
+-- Set the Player's active power to NoPower.
+deactivatePower :: Player -> GameState -> GameState
+deactivatePower p gs =
+  let ps = getPlayer p gs
+      ps' = if getPowerActive ps /= NoPower && getPowerActiveRemSecs ps <= 0
+            then ps { getPowerActive = NoPower }
+            else ps
+  in setPlayer p ps' gs
 
 activatePower :: GameState -> GameState
 activatePower gs =
-  let activate ps = if getPowerKeyPressed ps && getPower ps /= NoPower
-                    then ps { getPower = NoPower
-                            , getPowerActive = getPower ps
-                            , getPowerActiveRemSecs = secondsInPower (getPower ps)
-                            }
-                    else ps
-
-      -- The players activating their power
-      gs2 = foldPlayers activate gs
-
-      -----------
-      -- Speed --
-      -----------
-
-      gs3 = foldPlayersOver deactivateSpeed gs2
-
-      -- Set ball speed to fast if a player has Speed; otherwise set it to
-      -- normal.
-      ballVel = if allPlayers (\p -> getPowerActive p /= Speed) gs3
-                then ballVelocityNormal
-                else ballVelocitySpeed
-
-      --------------
-      -- Quagmire --
-      --------------
-
-  in gs3 { getBall = (getBall gs3) { getBallVelocity = ballVel } }
+  (foldPlayers activatePowerForPlayer .
+   applySpeed .
+   foldPlayersOver applyQuagmire .
+   foldPlayersOver deactivatePower) gs
 
 
 -- The render (below) "produces" time, and the simulation "consumes"
@@ -582,9 +594,10 @@ main = do
                 , getPaddleHalfWidth = 10
                 , getPaddleHalfHeight = 40
                 , getPaddleVelocity = 0
+                , getPaddleMaxVelocity = paddleVelocityNormal
                 , getPaddleHeading = 0
                 }
-            , getPower = Speed
+            , getPower = Quagmire
             , getPowerActive = NoPower
             , getPowerActiveRemSecs = 0.0
             , getConsecutiveSaves = 0
@@ -601,6 +614,7 @@ main = do
                 , getPaddleHalfWidth = 10
                 , getPaddleHalfHeight = 40
                 , getPaddleVelocity = 0
+                , getPaddleMaxVelocity = paddleVelocityNormal
                 , getPaddleHeading = 0
                 }
             , getPower = Speed
