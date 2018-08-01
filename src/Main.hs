@@ -263,8 +263,8 @@ toRectPaddle p =
   let (x, y) = getPaddlePos p
       halfW  = getPaddleHalfWidth p
       halfH  = getPaddleHalfHeight p
-                      -- A rectangle's position is defined by the top-left corner. To find that,
-                      -- take the position and move it by its half-widths/heights.
+  -- A rectangle's position is defined by the top-left corner. To find that,
+  -- take the position and move it by its half-widths/heights.
   in  Rectangle (toPV2 (x - halfW, y - halfH)) (V2 20 80)
 
 ballWallCollision :: GameState -> GameState
@@ -273,10 +273,10 @@ ballWallCollision gameState =
       bottomReport = checkCollision wallBottom (ballToObject (getBall gameState))
       rightReport  = checkCollision wallRight (ballToObject (getBall gameState))
       leftReport   = checkCollision wallLeft (ballToObject (getBall gameState))
-      b1           = updateBallStateInCollision topReport (getBall gameState)
-      b2           = updateBallStateInCollision bottomReport b1
-      b3           = updateBallStateInCollision rightReport b2
-      b4           = updateBallStateInCollision leftReport b3
+      b1           = updateBallCollision topReport (getBall gameState)
+      b2           = updateBallCollision bottomReport b1
+      b3           = updateBallCollision rightReport b2
+      b4           = updateBallCollision leftReport b3
       score1Incr   = if isCollided rightReport then 1 else 0
       score2Incr   = if isCollided leftReport then 1 else 0
       saves1       = if isCollided leftReport then 0 else getConsecutiveSaves (getPlayer1 gameState)
@@ -293,26 +293,26 @@ paddleWallCollision gameState =
       bottomReport1 = checkCollision wallBottom (paddleToObject (getPaddle (getPlayer P1 gameState)))
       rightReport1  = checkCollision wallRight (paddleToObject (getPaddle (getPlayer P1 gameState)))
       leftReport1   = checkCollision wallLeft (paddleToObject (getPaddle (getPlayer P1 gameState)))
-      p11           = updatePaddleStateInCollision topReport1 (getPaddle (getPlayer P1 gameState))
-      p12           = updatePaddleStateInCollision bottomReport1 p11
-      p13           = updatePaddleStateInCollision rightReport1 p12
-      p14           = updatePaddleStateInCollision leftReport1 p13
+      p11           = updatePaddleCollision topReport1 (getPaddle (getPlayer P1 gameState))
+      p12           = updatePaddleCollision bottomReport1 p11
+      p13           = updatePaddleCollision rightReport1 p12
+      p14           = updatePaddleCollision leftReport1 p13
 
       topReport2    = checkCollision wallTop (paddleToObject (getPaddle (getPlayer P2 gameState)))
       bottomReport2 = checkCollision wallBottom (paddleToObject (getPaddle (getPlayer P2 gameState)))
       rightReport2  = checkCollision wallRight (paddleToObject (getPaddle (getPlayer P2 gameState)))
       leftReport2   = checkCollision wallLeft (paddleToObject (getPaddle (getPlayer P2 gameState)))
-      p21           = updatePaddleStateInCollision topReport2 (getPaddle (getPlayer P2 gameState))
-      p22           = updatePaddleStateInCollision bottomReport2 p21
-      p23           = updatePaddleStateInCollision rightReport2 p22
-      p24           = updatePaddleStateInCollision leftReport2 p23
+      p21           = updatePaddleCollision topReport2 (getPaddle (getPlayer P2 gameState))
+      p22           = updatePaddleCollision bottomReport2 p21
+      p23           = updatePaddleCollision rightReport2 p22
+      p24           = updatePaddleCollision leftReport2 p23
   in  (setPaddle P1 p14 . setPaddle P2 p24) gameState
 
-updatePaddleStateInCollision :: Report -> Paddle -> Paddle
-updatePaddleStateInCollision report paddle = case report of
+updatePaddleCollision :: Report -> Paddle -> Paddle
+updatePaddleCollision report paddle = case report of
   NotCollided -> paddle
   Collided a d ->
-     -- Update the ball's position to get it out of collision.
+     -- Update the paddle's position to get it out of collision.
     let (x, y) = getPaddlePos paddle
     in  paddle { getPaddlePos = (x + (d * cos (toRadian a)), y + (d * sin (toRadian a))) }
 
@@ -330,8 +330,8 @@ changeDirection a pvh =
         | otherwise   -> a
   in  a'
 
-updateBallStateInCollision :: Report -> Ball -> Ball
-updateBallStateInCollision report ball = case report of
+updateBallCollision :: Report -> Ball -> Ball
+updateBallCollision report ball = case report of
   NotCollided -> ball
   Collided a d ->
      -- Update the ball's position to get it out of collision (we
@@ -355,10 +355,10 @@ ballPaddleCollision gameState =
       saves2 = if isCollided paddle2Collision
         then getConsecutiveSaves (getPlayer2 gameState) + 1
         else getConsecutiveSaves (getPlayer2 gameState)
-      gameState1 = gameState { getBall    = updateBallStateInCollision paddle1Collision (getBall gameState)
+      gameState1 = gameState { getBall    = updateBallCollision paddle1Collision (getBall gameState)
                              , getPlayer1 = setConsecutiveSaves saves1 (getPlayer1 gameState)
                              }
-      gameState2 = gameState1 { getBall    = updateBallStateInCollision paddle2Collision (getBall gameState1)
+      gameState2 = gameState1 { getBall    = updateBallCollision paddle2Collision (getBall gameState1)
                               , getPlayer2 = setConsecutiveSaves saves2 (getPlayer2 gameState1)
                               }
   in  gameState2
