@@ -376,31 +376,15 @@ renderText renderer font color pos =
 
 type PaddleKeyMap = [([SDL.Scancode], Paddle -> Paddle)]
 
-keyMapPlayer1 :: PaddleKeyMap
-keyMapPlayer1 = [
-    ([SDL.ScancodeS], paddleMove 0.25)
-  , ([SDL.ScancodeW], paddleMove 0.75)
-  ]
-
-keyMapPlayer2 :: PaddleKeyMap
-keyMapPlayer2 = [
-    ([SDL.ScancodeDown], paddleMove 0.25)
-  , ([SDL.ScancodeUp], paddleMove 0.75)
-  ]
-
 -- Possibly modify game state, or use the last one. Check if a key is
 -- pressed down, and do the state modification.
-movePaddleState ::
-  PaddleKeyMap ->
-  (SDL.Scancode -> Bool) -> -- ^ From SDL.getKeyboardState
-  Paddle -> -- ^ Current paddle state
-  Paddle    -- ^ Returns new paddle state
-movePaddleState paddleKeyMap keyMap paddle =
-  -- Find the first element where all the required keys are hit; use that as the
-  -- movement for this paddle.
-  case L.find (\(keys, _) -> L.all keyMap keys) paddleKeyMap of
-    Just (_, movement) -> movement paddle
-    Nothing -> paddleStop paddle
+movePaddleState :: PlayerState -- ^ The player whose paddle is being moved
+                -> Paddle      -- ^ Current paddle state
+                -> Paddle      -- ^ Returns new paddle state
+movePaddleState ps paddle =
+  if | getUpKeyPressed ps -> paddleMove 0.75 paddle
+     | getDownKeyPressed ps -> paddleMove 0.25 paddle
+     | otherwise -> paddleStop paddle
 
 suddenDeath :: GameState -> Bool
 suddenDeath gs = getTimeRemainingSecs gs <= 0 && getScore (getPlayer P1 gs) == getScore (getPlayer P2 gs)
@@ -448,16 +432,16 @@ activatePower gs =
 -- simulation time dt, we simulation multiple times per frame.
 --
 -- https://gafferongames.com/post/fix_your_timestep/
-simulationLoop :: (SDL.Scancode -> Bool) -- ^ From SDL.getKeyboardState
-               -> GameState
-               -> GameState
-simulationLoop keyMap gameState =
+--
+-- TODO remove use of keyMap
+simulationLoop :: GameState -> GameState
+simulationLoop gameState =
   if getAccumulatedTimeSecs gameState >= dt
   then
     -- Possibly modify game state, or use the last one. Check if a key is
     -- pressed down, and do the state modification.
-    let gameState1 = gameState { getPaddle1 = movePaddleState keyMapPlayer1 keyMap (getPaddle1 gameState)}
-        gameState2 = gameState1 { getPaddle2 = movePaddleState keyMapPlayer2 keyMap (getPaddle2 gameState1)}
+    let gameState1 = gameState { getPaddle1 = movePaddleState (getPlayer1 gameState) (getPaddle1 gameState)}
+        gameState2 = gameState1 { getPaddle2 = movePaddleState (getPlayer2 gameState) (getPaddle2 gameState1)}
 
     -- Update ball position.
         gameState3 = gameState2 { getBall = updateBall (getBall gameState2) }
@@ -475,7 +459,7 @@ simulationLoop keyMap gameState =
 
         gameState10 = gameState9 { getAccumulatedTimeSecs = getAccumulatedTimeSecs gameState9 - dt }
 
-    in simulationLoop keyMap gameState10
+    in simulationLoop gameState10
   else gameState
 
 registerKeyPresses :: (SDL.Scancode -> Bool) -> GameState -> GameState
@@ -693,7 +677,7 @@ main = do
             else do
               loopStartTime <- Clock.getTime Clock.Monotonic
 
-              let simulatedGameState = simulationLoop keyMap (registerKeyPresses keyMap gameState)
+              let simulatedGameState = simulationLoop (registerKeyPresses keyMap gameState)
 
               -- Press "P" to spit out debugging info.
               when (keyMap SDL.ScancodeP) (print simulatedGameState)
