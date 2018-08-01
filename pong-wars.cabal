@@ -25,6 +25,7 @@ executable pong-wars
                      , bytestring
                      , clock
                      , containers
+                     , random
                      , sdl2
                      , sdl2-image >= 2.0
                      , sdl2-mixer >= 1.0

@@ -21,6 +21,7 @@ import qualified SDL
 import qualified SDL.Font                      as Font
 import qualified SDL.Mixer                     as Mix
 import qualified System.Clock                  as Clock
+import qualified System.Random                 as Rand
 
 import           PongWars.Collision
 
@@ -76,6 +77,7 @@ data PlayerState = PlayerState
   , getPower :: Power
   , getPowerActive :: Power
   , getPowerActiveRemSecs :: Double  -- Seconds remaining for player's power
+  , getNextRandomPower :: Power
   , getConsecutiveSaves :: Int
 
   -- Keys being pressed
@@ -400,10 +402,12 @@ movePaddle ps paddle = if
 suddenDeath :: GameState -> Bool
 suddenDeath gs = getTimeRemainingSecs gs <= 0 && getScore (getPlayer P1 gs) == getScore (getPlayer P2 gs)
 
+-- Determine if the players have earned a new power. If so, choose a random
+-- power. Don't set a new power if there's a currently active power.
 determinePowers :: GameState -> GameState
 determinePowers gs =
   let speedCheck p = if getConsecutiveSaves p >= 4 && getPower p == NoPower
-        then p { getConsecutiveSaves = 0, getPower = Speed }
+        then p { getConsecutiveSaves = 0, getPower = (getNextRandomPower p) }
         else p
   in  foldPlayers speedCheck gs
 
@@ -451,17 +455,16 @@ applyPowers gs =
   (foldPlayers activatePower . applySpeed . foldPlayersOver applyQuagmire . foldPlayersOver deactivatePower) gs
 
 
--- The render (below) "produces" time, and the simulation "consumes"
--- time. Keep on looping until the simulation has consumed all (with
-    -- a remainder) of the accumulated time between renders.
+-- The render (below) "produces" time, and the simulation "consumes" time. Keep
+-- on looping until the simulation has consumed all (with a remainder) of the
+-- accumulated time between renders.
 --
--- So if the FPS is HIGHER than simulation time dt, then we only
--- simulation once for a couple of frames. But if FPS is lower than
--- simulation time dt, we simulation multiple times per frame.
+-- So if the FPS is HIGHER than simulation time dt, then we only simulation once
+-- for a couple of frames. But if FPS is lower than simulation time dt, we
+-- simulation multiple times per frame.
 --
 -- https://gafferongames.com/post/fix_your_timestep/
 --
--- TODO remove use of keyMap
 simulationLoop :: GameState -> GameState
 simulationLoop gameState = if getAccumulatedTimeSecs gameState >= dt
   then
@@ -500,6 +503,26 @@ registerKeyPresses keyMap gs =
                              }
   in  gs { getPlayer1 = p1, getPlayer2 = p2 }
 
+-- Converts an integer to a specific Power. Assumes the int > 0, and < the
+-- number of powers available.
+numToPower :: Int -> Power
+numToPower i =
+  case i of
+    1 -> Speed
+    2 -> Quagmire
+    _ -> Speed
+
+-- Set the getNextRandomPower attributes in GameState.
+registerNextRandomPowers :: GameState -> IO GameState
+registerNextRandomPowers gs = do
+  power1 <- Rand.getStdRandom (Rand.randomR (1,2)) >>= \i -> return $ numToPower i
+  power2 <- Rand.getStdRandom (Rand.randomR (1,2)) >>= \i -> return $ numToPower i
+
+  let gs1 = setPlayer P1 ((getPlayer P1 gs) { getNextRandomPower = power1 }) gs
+  let gs2 = setPlayer P2 ((getPlayer P2 gs1) { getNextRandomPower = power2 }) gs1
+
+  return gs2
+
 renderAndFlip :: Renderer -> IO () -> IO ()
 renderAndFlip renderer f = do
   -- Initialize the backbuffer
@@ -524,7 +547,7 @@ main = do
     when (renderQuality /= SDL.ScaleLinear) $ putStrLn "Warning: Linear texture filtering not enabled!"
 
   window <- SDL.createWindow "Pong Wars" SDL.defaultWindow { SDL.windowInitialSize = V2 screenWidth screenHeight }
-                      -- , SDL.windowMode = SDL.Fullscreen
+  -- , SDL.windowMode = SDL.Fullscreen
   SDL.showWindow window
 
   renderer <- SDL.createRenderer
@@ -586,6 +609,7 @@ main = do
         , getPower              = Quagmire
         , getPowerActive        = NoPower
         , getPowerActiveRemSecs = 0.0
+        , getNextRandomPower    = Speed
         , getConsecutiveSaves   = 0
         , getUpKeyPressed       = False
         , getDownKeyPressed     = False
@@ -604,6 +628,7 @@ main = do
         , getPower              = Speed
         , getPowerActive        = NoPower
         , getPowerActiveRemSecs = 0.0
+        , getNextRandomPower    = Speed
         , getConsecutiveSaves   = 0
         , getUpKeyPressed       = False
         , getDownKeyPressed     = False
@@ -689,7 +714,10 @@ main = do
           else do
             loopStartTime <- Clock.getTime Clock.Monotonic
 
-            let simulatedGameState = simulationLoop (registerKeyPresses keyMap gameState)
+            -- Random generators
+            gameStateRandom <- registerNextRandomPowers gameState
+
+            let simulatedGameState = simulationLoop (registerKeyPresses keyMap gameStateRandom)
 
             -- Press "P" to spit out debugging info.
             when (keyMap SDL.ScancodeP) (print simulatedGameState)
