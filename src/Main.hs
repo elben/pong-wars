@@ -429,8 +429,8 @@ applyQuagmire p gs =
         gs' = deactivatePower p gs
     in setPlayer (opponent p) ps' gs'
 
-activatePowerForPlayer :: PlayerState -> PlayerState
-activatePowerForPlayer ps =
+activatePower :: PlayerState -> PlayerState
+activatePower ps =
   if getPowerKeyPressed ps && getPower ps /= NoPower
   then ps { getPower = NoPower
           , getPowerActive = getPower ps
@@ -447,9 +447,14 @@ deactivatePower p gs =
             else ps
   in setPlayer p ps' gs
 
-activatePower :: GameState -> GameState
-activatePower gs =
-  (foldPlayers activatePowerForPlayer .
+-- | Apply the available powers.
+--
+-- Start a power if the user activates it. Modifies the game state for any
+-- active power that's running. Turn off the power if the time is up. Deactivate
+-- the user's power.
+applyPowers :: GameState -> GameState
+applyPowers gs =
+  (foldPlayers activatePower .
    applySpeed .
    foldPlayersOver applyQuagmire .
    foldPlayersOver deactivatePower) gs
@@ -487,7 +492,7 @@ simulationLoop gameState =
         gameState7 = paddleWallCollision gameState6
         gameState8 = ballPaddleCollision gameState7
 
-        gameState9 = (determinePowers . activatePower) gameState8
+        gameState9 = (determinePowers . applyPowers) gameState8
 
         gameState10 = gameState9 { getAccumulatedTimeSecs = getAccumulatedTimeSecs gameState9 - dt }
 
