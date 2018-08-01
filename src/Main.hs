@@ -518,8 +518,8 @@ registerNextRandomPowers gs = do
   power1 <- Rand.getStdRandom (Rand.randomR (1,2)) >>= \i -> return $ numToPower i
   power2 <- Rand.getStdRandom (Rand.randomR (1,2)) >>= \i -> return $ numToPower i
 
-  let gs1 = setPlayer P1 ((getPlayer P1 gs) { getNextRandomPower = power1 }) gs
-  let gs2 = setPlayer P2 ((getPlayer P2 gs1) { getNextRandomPower = power2 }) gs1
+  let gs1 = mapPlayer P1 (\ps -> ps { getNextRandomPower = power1 } ) gs
+  let gs2 = mapPlayer P2 (\ps -> ps { getNextRandomPower = power2 } ) gs
 
   return gs2
 
