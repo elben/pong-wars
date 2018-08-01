@@ -169,10 +169,10 @@ secondsInPower Fortress = 10.0
 secondsInPower Quagmire = 5.0
 
 ballVelocityNormal :: Double
-ballVelocityNormal = 500
+ballVelocityNormal = 550
 
 ballVelocitySpeed :: Double
-ballVelocitySpeed = 700
+ballVelocitySpeed = 750
 
 paddleVelocityNormal :: Double
 paddleVelocityNormal = 600.0
