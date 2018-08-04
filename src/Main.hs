@@ -297,7 +297,6 @@ ballWallCollision gameState =
   in gameState { getBall    = b4
                , getPlayer1 = (incrScore score1Incr . setConsecutiveSaves saves1) (getPlayer1 gameState)
                , getPlayer2 = (incrScore score2Incr . setConsecutiveSaves saves2) (getPlayer2 gameState)
-               -- , getSomeoneScored = isCollided rightReport || isCollided leftReport
                , getSomeoneScored = score1Incr > 0 || score2Incr > 0
                }
 
@@ -673,6 +672,7 @@ main = do
     -- Helper functions --
     ----------------------
 
+    playPowerSfx :: Power -> IO ()
     playPowerSfx power = do
       let sfx = case power of
                   Speed -> speedSfx
@@ -684,11 +684,14 @@ main = do
       _ <- Mix.playOn 2 Mix.Once sfx
       return ()
 
+    renderTimeRemaining :: GameState -> IO ()
     renderTimeRemaining gs = do
       let r = renderTextAlign renderer mediumFont fontColorWhite (400, 20) AlignCenter AlignTop
       if suddenDeath gs
         then r "Sudden Death!"
         else r (T.pack $ show (floor (getTimeRemainingSecs gs) :: Integer))
+
+    renderScore :: GameState -> Player -> IO ()
     renderScore gs player = do
       let halign = case player of
                      P1 -> AlignLeft
@@ -703,6 +706,8 @@ main = do
                       halign
                       AlignTop
                       (T.pack $ show (getScore (getPlayer player gs)))
+
+    renderPower :: GameState -> Player -> IO ()
     renderPower gs player = do
       let halign = case player of
                      P1 -> AlignLeft
@@ -719,6 +724,7 @@ main = do
         AlignBottom
         (showPower (getPower (getPlayer player gs)))
 
+    loop :: GameState -> IO ()
     loop oldGameState = do
       -- Get all buffered keyboard events
       events <- map SDL.eventPayload <$> SDL.pollEvents
