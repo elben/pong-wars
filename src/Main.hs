@@ -662,6 +662,10 @@ main = do
       , getSomeoneScored = False
       }
 
+    ----------------------
+    -- Helper functions --
+    ----------------------
+
     playPowerSfx power = do
       let sfx = case power of
                   Speed -> speedSfx
@@ -672,6 +676,41 @@ main = do
       when playingChannel2 (Mix.halt 2)
       _ <- Mix.playOn 2 Mix.Once sfx
       return ()
+
+    renderTimeRemaining gs = do
+      let r = renderTextAlign renderer mediumFont fontColorWhite (400, 20) AlignCenter AlignTop
+      if suddenDeath gs
+        then r "Sudden Death!"
+        else r (T.pack $ show (floor (getTimeRemainingSecs gs) :: Integer))
+    renderScore player gs = do
+      let halign = case player of
+                     P1 -> AlignLeft
+                     P2 -> AlignRight
+      let x = case player of
+                P1 -> 20
+                P2 -> 780
+      renderTextAlign renderer
+                      mediumFont
+                      fontColorWhite
+                      (x, 20)
+                      halign
+                      AlignTop
+                      (T.pack $ show (getScore (getPlayer player gs)))
+    renderPower player gs = do
+      let halign = case player of
+                     P1 -> AlignLeft
+                     P2 -> AlignRight
+      let x = case player of
+                P1 -> 30
+                P2 -> 770
+      when (getPower (getPlayer player gs) /= NoPower) $ renderTextAlign
+        renderer
+        smallFont
+        fontColorWhite
+        (x, 570)
+        halign
+        AlignBottom
+        (showPower (getPower (getPlayer player gs)))
 
     loop oldGameState = do
       -- Get all buffered keyboard events
@@ -787,42 +826,11 @@ main = do
                        Nothing
                        (Just (toRectPaddle (getPaddle (getPlayer P2 simulatedGameState))))
 
-              if suddenDeath simulatedGameState
-                then renderTextAlign renderer mediumFont fontColorWhite (400, 20) AlignCenter AlignTop "Sudden Death!"
-                else
-                  renderTextAlign renderer mediumFont fontColorWhite (400, 20) AlignCenter AlignTop
-                    $ (T.pack $ show (floor (getTimeRemainingSecs simulatedGameState) :: Integer))
-
-              renderText renderer
-                         mediumFont
-                         fontColorWhite
-                         (20, 20)
-                         (T.pack $ show (getScore (getPlayer P1 simulatedGameState)))
-              renderTextAlign renderer
-                              mediumFont
-                              fontColorWhite
-                              (780, 20)
-                              AlignRight
-                              AlignTop
-                              (T.pack $ show (getScore (getPlayer P2 simulatedGameState)))
-
-              when (getPower (getPlayer1 simulatedGameState) /= NoPower) $ renderTextAlign
-                renderer
-                smallFont
-                fontColorWhite
-                (30, 570)
-                AlignLeft
-                AlignBottom
-                (showPower (getPower (getPlayer1 simulatedGameState)))
-
-              when (getPower (getPlayer2 simulatedGameState) /= NoPower) $ renderTextAlign
-                renderer
-                smallFont
-                fontColorWhite
-                (770, 570)
-                AlignRight
-                AlignBottom
-                (showPower (getPower (getPlayer2 simulatedGameState)))
+              renderTimeRemaining simulatedGameState
+              renderScore P1 simulatedGameState
+              renderScore P2 simulatedGameState
+              renderPower P1 simulatedGameState
+              renderPower P2 simulatedGameState
 
             loopEndTime <- Clock.getTime Clock.Monotonic
             let diffSecs = fromIntegral (Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime loopEndTime) / 1000000000
