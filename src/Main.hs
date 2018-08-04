@@ -122,8 +122,15 @@ foldPlayers f gs = (mapPlayer P1 f . mapPlayer P2 f) gs
 foldPlayersOver :: (Player -> GameState -> GameState) -> GameState -> GameState
 foldPlayersOver f gs = (f P1 . f P2) gs
 
+-- Returns true if the predicate is true for all players.
 allPlayers :: (PlayerState -> Bool) -> GameState -> Bool
 allPlayers f gs = f (getPlayer P1 gs) && f (getPlayer P2 gs)
+
+-- Do the given action for each player.
+forEachPlayer :: (Player -> IO ()) -> IO ()
+forEachPlayer f = do
+  f P1
+  f P2
 
 setPaddle :: Player -> Paddle -> GameState -> GameState
 setPaddle p paddle gs = case p of
@@ -682,7 +689,7 @@ main = do
       if suddenDeath gs
         then r "Sudden Death!"
         else r (T.pack $ show (floor (getTimeRemainingSecs gs) :: Integer))
-    renderScore player gs = do
+    renderScore gs player = do
       let halign = case player of
                      P1 -> AlignLeft
                      P2 -> AlignRight
@@ -696,7 +703,7 @@ main = do
                       halign
                       AlignTop
                       (T.pack $ show (getScore (getPlayer player gs)))
-    renderPower player gs = do
+    renderPower gs player = do
       let halign = case player of
                      P1 -> AlignLeft
                      P2 -> AlignRight
@@ -827,10 +834,8 @@ main = do
                        (Just (toRectPaddle (getPaddle (getPlayer P2 simulatedGameState))))
 
               renderTimeRemaining simulatedGameState
-              renderScore P1 simulatedGameState
-              renderScore P2 simulatedGameState
-              renderPower P1 simulatedGameState
-              renderPower P2 simulatedGameState
+              forEachPlayer $ renderScore simulatedGameState
+              forEachPlayer $ renderPower simulatedGameState
 
             loopEndTime <- Clock.getTime Clock.Monotonic
             let diffSecs = fromIntegral (Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime loopEndTime) / 1000000000
@@ -878,7 +883,6 @@ main = do
   SDL.destroyWindow window
   Font.quit
   Mix.free mainMusic
-  -- Mix.free scoreSfx
   Mix.free speedSfx
   Mix.free quagmireSfx
   Mix.closeAudio
