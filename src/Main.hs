@@ -590,7 +590,6 @@ main = do
 
   Mix.openAudio Mix.defaultAudio 512
 
-  -- scoreSfx <- Mix.load "resources/audio/sfx/107789__leviclaassen__hit-002.wav"
   speedSfx <- Mix.load "resources/audio/sfx/351409__newagesoup__fat-pulse-short.wav"
   quagmireSfx <- Mix.load "resources/audio/sfx/368512__josepharaoh99__engine-dying.mp3"
 
@@ -662,6 +661,17 @@ main = do
       , getPaddleHit = False
       , getSomeoneScored = False
       }
+
+    playPowerSfx power = do
+      let sfx = case power of
+                  Speed -> speedSfx
+                  Quagmire -> quagmireSfx
+                  _ -> speedSfx
+
+      playingChannel2 <- Mix.playing 2
+      when playingChannel2 (Mix.halt 2)
+      _ <- Mix.playOn 2 Mix.Once sfx
+      return ()
 
     loop oldGameState = do
       -- Get all buffered keyboard events
@@ -742,7 +752,6 @@ main = do
             gameStateRandom <- registerNextRandomPowers gameState
 
             -- Save states that we may want to compare after simulation loops.
-            let scoreSum = getScore (getPlayer P1 gameStateRandom) + getScore (getPlayer P2 gameStateRandom)
             let powerActive1 = getPowerActive (getPlayer P1 gameStateRandom)
             let powerActive2 = getPowerActive (getPlayer P2 gameStateRandom)
 
@@ -752,8 +761,6 @@ main = do
 
             let simulatedGameState = simulationLoop (registerKeyPresses keyMap gameStateRandom)
 
-            let scoreSum' = getScore (getPlayer P1 simulatedGameState) + getScore (getPlayer P2 simulatedGameState)
-
             let powerActive1' = getPowerActive (getPlayer P1 simulatedGameState)
             let powerActive2' = getPowerActive (getPlayer P2 simulatedGameState)
 
@@ -761,36 +768,8 @@ main = do
             -- Play sound effects --
             ------------------------
 
-            -- If the score changed between the simulation loops, then play the
-            -- scoring sfx.
-            -- when (scoreSum' > scoreSum) $ do
-            --   -- Make sure nothing is playing on channel 1
-            --   playingChannel1 <- Mix.playing 1
-            --   when playingChannel1 (Mix.halt 1)
-            --   _ <- Mix.playOn 1 Mix.Once scoreSfx
-            --   return ()
-
-            -- TODO refactor sfx playing for both players
-            when (powerActive1 == NoPower && powerActive1' /= NoPower) $ do
-              let sfx = case powerActive1' of
-                          Speed -> speedSfx
-                          Quagmire -> quagmireSfx
-                          _ -> speedSfx
-
-              playingChannel2 <- Mix.playing 2
-              when playingChannel2 (Mix.halt 2)
-              _ <- Mix.playOn 2 Mix.Once sfx
-              return ()
-            when (powerActive2 == NoPower && powerActive2' /= NoPower) $ do
-              let sfx = case powerActive2' of
-                          Speed -> speedSfx
-                          Quagmire -> quagmireSfx
-                          _ -> speedSfx
-
-              playingChannel2 <- Mix.playing 2
-              when playingChannel2 (Mix.halt 2)
-              _ <- Mix.playOn 2 Mix.Once sfx
-              return ()
+            when (powerActive1 == NoPower && powerActive1' /= NoPower) $ playPowerSfx powerActive1'
+            when (powerActive2 == NoPower && powerActive2' /= NoPower) $ playPowerSfx powerActive2'
 
             -- Press "P" to spit out debugging info.
             when (keyMap SDL.ScancodeP) (print simulatedGameState)
