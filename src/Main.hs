@@ -68,6 +68,12 @@ data GameState = GameState
   , getTimeRemainingSecs :: Double
   , getFps :: Integer
   , getAccumulatedTimeSecs :: Double
+
+  -- True if the paddle hit the ball at this simulation step. False otherwise.
+  , getPaddleHit :: Bool
+
+  -- True if someone scored at this simulation step. False otherwise.
+  , getSomeoneScored :: Bool
   }
   deriving Show
 
@@ -281,11 +287,12 @@ ballWallCollision gameState =
       score2Incr   = if isCollided leftReport then 1 else 0
       saves1       = if isCollided leftReport then 0 else getConsecutiveSaves (getPlayer1 gameState)
       saves2       = if isCollided rightReport then 0 else getConsecutiveSaves (getPlayer2 gameState)
-      gameState'   = gameState { getBall    = b4
-                               , getPlayer1 = (incrScore score1Incr . setConsecutiveSaves saves1) (getPlayer1 gameState)
-                               , getPlayer2 = (incrScore score2Incr . setConsecutiveSaves saves2) (getPlayer2 gameState)
-                               }
-  in  gameState'
+  in gameState { getBall    = b4
+               , getPlayer1 = (incrScore score1Incr . setConsecutiveSaves saves1) (getPlayer1 gameState)
+               , getPlayer2 = (incrScore score2Incr . setConsecutiveSaves saves2) (getPlayer2 gameState)
+               -- , getSomeoneScored = isCollided rightReport || isCollided leftReport
+               , getSomeoneScored = score1Incr > 0 || score2Incr > 0
+               }
 
 paddleWallCollision :: GameState -> GameState
 paddleWallCollision gameState =
@@ -361,7 +368,8 @@ ballPaddleCollision gameState =
       gameState2 = gameState1 { getBall    = updateBallCollision paddle2Collision (getBall gameState1)
                               , getPlayer2 = setConsecutiveSaves saves2 (getPlayer2 gameState1)
                               }
-  in  gameState2
+      paddleHit = isCollided paddle1Collision || isCollided paddle2Collision
+  in  gameState2 { getPaddleHit = paddleHit }
 
 toCInt :: Int -> CInt
 toCInt = fromIntegral
@@ -463,6 +471,11 @@ applyPowers gs =
 -- for a couple of frames. But if FPS is lower than simulation time dt, we
 -- simulation multiple times per frame.
 --
+-- Because the simulation loop can run 0 or more times, the main game loop
+-- should not depend on anything in GameState that may last only one simulation.
+-- If the main game loop requires comparing some state before and after a call
+-- to this function, it should store its own state.
+--
 -- https://gafferongames.com/post/fix_your_timestep/
 --
 simulationLoop :: GameState -> GameState
@@ -519,7 +532,7 @@ registerNextRandomPowers gs = do
   power2 <- Rand.getStdRandom (Rand.randomR (1,2)) >>= \i -> return $ numToPower i
 
   let gs1 = mapPlayer P1 (\ps -> ps { getNextRandomPower = power1 } ) gs
-  let gs2 = mapPlayer P2 (\ps -> ps { getNextRandomPower = power2 } ) gs
+  let gs2 = mapPlayer P2 (\ps -> ps { getNextRandomPower = power2 } ) gs1
 
   return gs2
 
@@ -546,8 +559,10 @@ main = do
     renderQuality <- SDL.get SDL.HintRenderScaleQuality
     when (renderQuality /= SDL.ScaleLinear) $ putStrLn "Warning: Linear texture filtering not enabled!"
 
-  window <- SDL.createWindow "Pong Wars" SDL.defaultWindow { SDL.windowInitialSize = V2 screenWidth screenHeight }
-  -- , SDL.windowMode = SDL.Fullscreen
+  window <- SDL.createWindow "Pong Wars" SDL.defaultWindow {
+      SDL.windowInitialSize = V2 screenWidth screenHeight
+    -- , SDL.windowMode = SDL.Fullscreen
+    }
   SDL.showWindow window
 
   renderer <- SDL.createRenderer
@@ -575,8 +590,15 @@ main = do
 
   Mix.openAudio Mix.defaultAudio 512
 
-  chunk <- Mix.load "resources/audio/purple-planet/Slipstream.ogg"
-  Mix.playForever chunk
+  -- scoreSfx <- Mix.load "resources/audio/sfx/107789__leviclaassen__hit-002.wav"
+  speedSfx <- Mix.load "resources/audio/sfx/351409__newagesoup__fat-pulse-short.wav"
+  quagmireSfx <- Mix.load "resources/audio/sfx/368512__josepharaoh99__engine-dying.mp3"
+
+  -- Load mainMusic as a Chunk, because trying to play a Music was causing
+  -- problems where the music would abruptly end.
+  mainMusic <- Mix.load "resources/audio/purple-planet/Slipstream.ogg"
+  -- Mix.playForever mainMusic
+  _ <- Mix.playOn 0 Mix.Forever mainMusic
 
   let
     startingGameState = GameState
@@ -637,6 +659,8 @@ main = do
       , getTimeRemainingSecs   = 90
       , getFps                 = 0
       , getAccumulatedTimeSecs = 0.0
+      , getPaddleHit = False
+      , getSomeoneScored = False
       }
 
     loop oldGameState = do
@@ -717,7 +741,56 @@ main = do
             -- Random generators
             gameStateRandom <- registerNextRandomPowers gameState
 
+            -- Save states that we may want to compare after simulation loops.
+            let scoreSum = getScore (getPlayer P1 gameStateRandom) + getScore (getPlayer P2 gameStateRandom)
+            let powerActive1 = getPowerActive (getPlayer P1 gameStateRandom)
+            let powerActive2 = getPowerActive (getPlayer P2 gameStateRandom)
+
+            ---------------------
+            -- Simulation loop --
+            ---------------------
+
             let simulatedGameState = simulationLoop (registerKeyPresses keyMap gameStateRandom)
+
+            let scoreSum' = getScore (getPlayer P1 simulatedGameState) + getScore (getPlayer P2 simulatedGameState)
+
+            let powerActive1' = getPowerActive (getPlayer P1 simulatedGameState)
+            let powerActive2' = getPowerActive (getPlayer P2 simulatedGameState)
+
+            ------------------------
+            -- Play sound effects --
+            ------------------------
+
+            -- If the score changed between the simulation loops, then play the
+            -- scoring sfx.
+            -- when (scoreSum' > scoreSum) $ do
+            --   -- Make sure nothing is playing on channel 1
+            --   playingChannel1 <- Mix.playing 1
+            --   when playingChannel1 (Mix.halt 1)
+            --   _ <- Mix.playOn 1 Mix.Once scoreSfx
+            --   return ()
+
+            -- TODO refactor sfx playing for both players
+            when (powerActive1 == NoPower && powerActive1' /= NoPower) $ do
+              let sfx = case powerActive1' of
+                          Speed -> speedSfx
+                          Quagmire -> quagmireSfx
+                          _ -> speedSfx
+
+              playingChannel2 <- Mix.playing 2
+              when playingChannel2 (Mix.halt 2)
+              _ <- Mix.playOn 2 Mix.Once sfx
+              return ()
+            when (powerActive2 == NoPower && powerActive2' /= NoPower) $ do
+              let sfx = case powerActive2' of
+                          Speed -> speedSfx
+                          Quagmire -> quagmireSfx
+                          _ -> speedSfx
+
+              playingChannel2 <- Mix.playing 2
+              when playingChannel2 (Mix.halt 2)
+              _ <- Mix.playOn 2 Mix.Once sfx
+              return ()
 
             -- Press "P" to spit out debugging info.
             when (keyMap SDL.ScancodeP) (print simulatedGameState)
@@ -817,6 +890,9 @@ main = do
 
   SDL.destroyWindow window
   Font.quit
-  Mix.free chunk
+  Mix.free mainMusic
+  -- Mix.free scoreSfx
+  Mix.free speedSfx
+  Mix.free quagmireSfx
   Mix.closeAudio
   SDL.quit

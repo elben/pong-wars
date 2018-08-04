@@ -15,6 +15,7 @@ extra-source-files:  README.md
 data-files:          resources/images/*.bmp
                    , resources/fonts/*.otf
                    , resources/audio/purple-planet/*.ogg
+                   , resources/audio/sfx/*.wav
 
 executable pong-wars
   hs-source-dirs:      src
