@@ -66,7 +66,7 @@ data GameState = GameState
   , getPlayer1 :: PlayerState
   , getPlayer2 :: PlayerState
   , getTimeRemainingSecs :: Double
-  , getFps :: Integer
+  , getFps :: Int
   , getAccumulatedTimeSecs :: Double
   }
   deriving Show
@@ -391,9 +391,6 @@ renderTextAlign renderer font color pos halign valign text = do
   SDL.copy renderer texture Nothing (Just (Rectangle (P (V2 (toCInt x) (toCInt y))) (V2 (toCInt w) (toCInt h))))
   SDL.destroyTexture texture
 
-renderText :: Renderer -> Font.Font -> Font.Color -> (Int, Int) -> T.Text -> IO ()
-renderText renderer font color pos = renderTextAlign renderer font color pos AlignLeft AlignTop
-
 -- Possibly modify game state, or use the last one. Check if a key is
 -- pressed down, and do the state modification.
 movePaddle
@@ -416,6 +413,10 @@ determinePowers gs =
         then p { getConsecutiveSaves = 0, getPower = (getNextRandomPower p) }
         else p
   in  foldPlayers speedCheck gs
+
+decrPowerActiveRemSecs :: Double -> PlayerState -> PlayerState
+decrPowerActiveRemSecs diffSecs ps =
+  ps { getPowerActiveRemSecs = if getPowerActive ps == NoPower then 0.0 else getPowerActiveRemSecs ps - diffSecs }
 
 -- Activate the Speed power for the given player. Speed increases the ball's
 -- speed.
@@ -513,6 +514,22 @@ registerKeyPresses keyMap gs =
                              , getPowerKeyPressed = keyMap SDL.ScancodeLeft
                              }
   in  gs { getPlayer1 = p1, getPlayer2 = p2 }
+
+-- Apply various state changes that we need a loop time difference (in seconds).
+applyTimeDiffSecs :: Double -> GameState -> GameState
+applyTimeDiffSecs diffSecs gs =
+  let
+      gameDurationSeconds = getTimeRemainingSecs gs - diffSecs
+      -- Decrease each player's active power remaining time.
+      gs1 = foldPlayers (decrPowerActiveRemSecs diffSecs) gs
+      gs2 = gs1
+        { getFps                 = floor (1.0 / diffSecs)
+          -- Shot clock ticks down
+        , getTimeRemainingSecs   = getTimeRemainingSecs gs1 - diffSecs
+        , getAccumulatedTimeSecs = getAccumulatedTimeSecs gs1 + diffSecs
+        , getScreen = if gameDurationSeconds >= 0 || suddenDeath gs1 then (getScreen gs1) else Winner
+        }
+  in gs2
 
 -- Converts an integer to a specific Power. Assumes the int > 0, and < the
 -- number of powers available.
@@ -697,7 +714,7 @@ main = do
       let r = renderTextAlign renderer mediumFont fontColorWhite (400, 20) AlignCenter AlignTop
       if suddenDeath gs
         then r "Sudden Death!"
-        else r (T.pack $ show (floor (getTimeRemainingSecs gs) :: Integer))
+        else r (T.pack $ show (floor (getTimeRemainingSecs gs) :: Int))
 
     renderScore :: GameState -> Player -> IO ()
     renderScore gs player = do
@@ -808,6 +825,10 @@ main = do
           else do
             loopStartTime <- Clock.getTime Clock.Monotonic
 
+            -------------------
+            -- Prepare state --
+            -------------------
+
             -- Random generators
             gameStateRandom <- registerNextRandomPowers gameState
 
@@ -824,15 +845,9 @@ main = do
             let powerActive1' = getPowerActive (getPlayer P1 simulatedGameState)
             let powerActive2' = getPowerActive (getPlayer P2 simulatedGameState)
 
-            ------------------------
-            -- Play sound effects --
-            ------------------------
-
-            when (powerActive1 == NoPower && powerActive1' /= NoPower) $ playPowerSfx powerActive1'
-            when (powerActive2 == NoPower && powerActive2' /= NoPower) $ playPowerSfx powerActive2'
-
-            -- Press "P" to spit out debugging info.
-            when (keyMap SDL.ScancodeP) (print simulatedGameState)
+            ------------
+            -- Render --
+            ------------
 
             renderAndFlip renderer $ do
               -- Draw stuff into buffer
@@ -844,37 +859,26 @@ main = do
               forEachPlayer $ renderScore simulatedGameState
               forEachPlayer $ renderPower simulatedGameState
 
+            ------------------------
+            -- Play sound effects --
+            ------------------------
+
+            when (powerActive1 == NoPower && powerActive1' /= NoPower) $ playPowerSfx powerActive1'
+            when (powerActive2 == NoPower && powerActive2' /= NoPower) $ playPowerSfx powerActive2'
+
+            -- Press "P" to spit out debugging info.
+            when (keyMap SDL.ScancodeP) (print simulatedGameState)
+
+            --------------------
+            -- Finalize state --
+            --------------------
+
             loopEndTime <- Clock.getTime Clock.Monotonic
-            let diffSecs = fromIntegral (Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime loopEndTime) / 1000000000
+            let diffSecs = fromIntegral (Clock.toNanoSecs (Clock.diffTimeSpec loopStartTime loopEndTime)) / 1000000000
 
-            -- Shot clock ticks down
-            let gameDurationSeconds = getTimeRemainingSecs simulatedGameState - diffSecs
+            let finalGameState = applyTimeDiffSecs diffSecs simulatedGameState
 
-            tickEndTime <- Clock.getTime Clock.Monotonic
-            let tickDiffNano = Clock.toNanoSecs $ Clock.diffTimeSpec loopStartTime tickEndTime
-
-            let
-              finalGameState = simulatedGameState
-                { getFps                 = 1000000000 `div` tickDiffNano
-                , getTimeRemainingSecs   = gameDurationSeconds
-                , getAccumulatedTimeSecs = getAccumulatedTimeSecs simulatedGameState + diffSecs
-                , getPlayer1             =
-                  (getPlayer1 simulatedGameState)
-                    { getPowerActiveRemSecs = if getPowerActive (getPlayer1 simulatedGameState) == NoPower
-                                                then 0.0
-                                                else getPowerActiveRemSecs (getPlayer1 simulatedGameState) - diffSecs
-                    }
-                , getPlayer2             =
-                  (getPlayer2 simulatedGameState)
-                    { getPowerActiveRemSecs = if getPowerActive (getPlayer2 simulatedGameState) == NoPower
-                                                then 0.0
-                                                else getPowerActiveRemSecs (getPlayer2 simulatedGameState) - diffSecs
-                    }
-                }
-
-            if gameDurationSeconds >= 0 || suddenDeath finalGameState
-              then return finalGameState
-              else return $ finalGameState { getScreen = Winner }
+            return finalGameState
 
       unless (getScreen gameState'' == Quit) (loop gameState'')
 
