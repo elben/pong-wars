@@ -259,6 +259,10 @@ toRadian a = 2 * pi * a
 toPV2 :: (Double, Double) -> Point V2 CInt
 toPV2 (x, y) = P $ V2 (round x) (round y)
 
+toRect :: Object -> Rectangle CInt
+toRect (AABB _ (x, y) hw hh) =
+  Rectangle (toPV2 (x - hw, y - hh)) (V2 (ceiling (hw * 2)) (ceiling (hh * 2)))
+
 toRectBall :: Ball -> Rectangle CInt
 toRectBall b =
   let (x, y) = getBallPos b
@@ -594,6 +598,7 @@ main = do
   texturePaddle2    <- loadTexture renderer "resources/images/paddle_pink.bmp"
   textureWinnerBlue <- loadTexture renderer "resources/images/winner_blue.bmp"
   textureWinnerPink <- loadTexture renderer "resources/images/winner_pink.bmp"
+  texturePixel      <- loadTexture renderer "resources/images/pixel.bmp"
 
   mediumFont        <- do
     fp <- getDataFileName "resources/fonts/NeonTubes2.otf"
@@ -701,6 +706,13 @@ main = do
     renderBall :: GameState -> IO ()
     renderBall gs =
       SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall gs)))
+
+    renderWalls :: IO ()
+    renderWalls = do
+      SDL.copy renderer texturePixel Nothing (Just (toRect wallLeft))
+      SDL.copy renderer texturePixel Nothing (Just (toRect wallRight))
+      SDL.copy renderer texturePixel Nothing (Just (toRect wallTop))
+      SDL.copy renderer texturePixel Nothing (Just (toRect wallBottom))
 
     renderPaddle :: GameState -> Player -> IO ()
     renderPaddle gs player = do
@@ -853,6 +865,7 @@ main = do
               -- Draw stuff into buffer
               renderBackground
               renderBall simulatedGameState
+              renderWalls
               forEachPlayer $ renderPaddle simulatedGameState
 
               renderTimeRemaining simulatedGameState
@@ -890,6 +903,7 @@ main = do
   SDL.destroyTexture texturePaddle1
   SDL.destroyTexture texturePaddle2
   SDL.destroyTexture textureMenu
+  SDL.destroyTexture texturePixel
 
   SDL.destroyWindow window
   Font.quit
