@@ -572,7 +572,7 @@ main = do
 
   window <- SDL.createWindow "Pong Wars" SDL.defaultWindow {
       SDL.windowInitialSize = V2 screenWidth screenHeight
-    -- , SDL.windowMode = SDL.Fullscreen
+    , SDL.windowMode = SDL.Fullscreen
     }
   SDL.showWindow window
 
@@ -857,12 +857,14 @@ main = do
               -- Draw stuff into buffer
               renderBackground
               renderBall simulatedGameState
-              renderWalls
               forEachPlayer $ renderPaddle simulatedGameState
 
               renderTimeRemaining simulatedGameState
               forEachPlayer $ renderScore simulatedGameState
               forEachPlayer $ renderPower simulatedGameState
+
+              -- Uncomment this to debug wall positions
+              -- renderWalls
 
             ------------------------
             -- Play sound effects --
