@@ -596,13 +596,14 @@ main = do
 
   Mix.openAudio Mix.defaultAudio 512
 
+  -- Load sound effects.
   speedSfx <- Mix.load "resources/audio/sfx/351409__newagesoup__fat-pulse-short.wav"
   quagmireSfx <- Mix.load "resources/audio/sfx/368512__josepharaoh99__engine-dying.mp3"
 
   -- Load mainMusic as a Chunk, because trying to play a Music was causing
   -- problems where the music would abruptly end.
   mainMusic <- Mix.load "resources/audio/purple-planet/Slipstream.ogg"
-  -- Mix.playForever mainMusic
+  -- Play on Channel 0.
   _ <- Mix.playOn 0 Mix.Forever mainMusic
 
   let
@@ -672,6 +673,8 @@ main = do
     -- Helper functions --
     ----------------------
 
+    -- Play power sound effects on channel 2, so that it doesn't collide with
+    -- music.
     playPowerSfx :: Power -> IO ()
     playPowerSfx power = do
       let sfx = case power of
@@ -683,6 +686,21 @@ main = do
       when playingChannel2 (Mix.halt 2)
       _ <- Mix.playOn 2 Mix.Once sfx
       return ()
+
+    renderBackground :: IO ()
+    renderBackground =
+      SDL.copy renderer textureBackground Nothing Nothing
+
+    renderBall :: GameState -> IO ()
+    renderBall gs =
+      SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall gs)))
+
+    renderPaddle :: GameState -> Player -> IO ()
+    renderPaddle gs player = do
+      let tex = case player of
+                  P1 -> texturePaddle1
+                  P2 -> texturePaddle2
+      SDL.copy renderer tex Nothing (Just (toRectPaddle (getPaddle (getPlayer player gs))))
 
     renderTimeRemaining :: GameState -> IO ()
     renderTimeRemaining gs = do
@@ -828,16 +846,9 @@ main = do
 
             renderAndFlip renderer $ do
               -- Draw stuff into buffer
-              SDL.copy renderer textureBackground Nothing Nothing
-              SDL.copy renderer textureBall Nothing (Just (toRectBall (getBall simulatedGameState)))
-              SDL.copy renderer
-                       texturePaddle1
-                       Nothing
-                       (Just (toRectPaddle (getPaddle (getPlayer P1 simulatedGameState))))
-              SDL.copy renderer
-                       texturePaddle2
-                       Nothing
-                       (Just (toRectPaddle (getPaddle (getPlayer P2 simulatedGameState))))
+              renderBackground
+              renderBall simulatedGameState
+              forEachPlayer $ renderPaddle simulatedGameState
 
               renderTimeRemaining simulatedGameState
               forEachPlayer $ renderScore simulatedGameState
