@@ -68,12 +68,6 @@ data GameState = GameState
   , getTimeRemainingSecs :: Double
   , getFps :: Integer
   , getAccumulatedTimeSecs :: Double
-
-  -- True if the paddle hit the ball at this simulation step. False otherwise.
-  , getPaddleHit :: Bool
-
-  -- True if someone scored at this simulation step. False otherwise.
-  , getSomeoneScored :: Bool
   }
   deriving Show
 
@@ -297,7 +291,6 @@ ballWallCollision gameState =
   in gameState { getBall    = b4
                , getPlayer1 = (incrScore score1Incr . setConsecutiveSaves saves1) (getPlayer1 gameState)
                , getPlayer2 = (incrScore score2Incr . setConsecutiveSaves saves2) (getPlayer2 gameState)
-               , getSomeoneScored = score1Incr > 0 || score2Incr > 0
                }
 
 paddleWallCollision :: GameState -> GameState
@@ -374,8 +367,7 @@ ballPaddleCollision gameState =
       gameState2 = gameState1 { getBall    = updateBallCollision paddle2Collision (getBall gameState1)
                               , getPlayer2 = setConsecutiveSaves saves2 (getPlayer2 gameState1)
                               }
-      paddleHit = isCollided paddle1Collision || isCollided paddle2Collision
-  in  gameState2 { getPaddleHit = paddleHit }
+  in  gameState2
 
 toCInt :: Int -> CInt
 toCInt = fromIntegral
@@ -665,8 +657,6 @@ main = do
       , getTimeRemainingSecs   = 90
       , getFps                 = 0
       , getAccumulatedTimeSecs = 0.0
-      , getPaddleHit = False
-      , getSomeoneScored = False
       }
 
     ----------------------
