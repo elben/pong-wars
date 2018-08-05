@@ -212,10 +212,10 @@ wallBottom :: Object
 wallBottom = AABB massWall (maxWidth / 2, maxHeight + 50) (maxWidth / 2 + 1) 50
 
 wallLeft :: Object
-wallLeft = AABB massWall (-50, maxHeight / 2) 50 (maxHeight / 2 + 1)
+wallLeft = AABB massWall (19, maxHeight / 2) 10 (maxHeight / 2 + 1)
 
 wallRight :: Object
-wallRight = AABB massWall (maxWidth + 50, maxHeight / 2) 50 (maxHeight / 2 + 1)
+wallRight = AABB massWall (maxWidth - 19, maxHeight / 2) 10 (maxHeight / 2 + 1)
 
 -- | Normalize heading into the range of [0, 1)
 normalizeHeading :: Double -> Double
@@ -301,22 +301,14 @@ paddleWallCollision :: GameState -> GameState
 paddleWallCollision gameState =
   let topReport1    = checkCollision wallTop (paddleToObject (getPaddle (getPlayer P1 gameState)))
       bottomReport1 = checkCollision wallBottom (paddleToObject (getPaddle (getPlayer P1 gameState)))
-      rightReport1  = checkCollision wallRight (paddleToObject (getPaddle (getPlayer P1 gameState)))
-      leftReport1   = checkCollision wallLeft (paddleToObject (getPaddle (getPlayer P1 gameState)))
       p11           = updatePaddleCollision topReport1 (getPaddle (getPlayer P1 gameState))
       p12           = updatePaddleCollision bottomReport1 p11
-      p13           = updatePaddleCollision rightReport1 p12
-      p14           = updatePaddleCollision leftReport1 p13
 
       topReport2    = checkCollision wallTop (paddleToObject (getPaddle (getPlayer P2 gameState)))
       bottomReport2 = checkCollision wallBottom (paddleToObject (getPaddle (getPlayer P2 gameState)))
-      rightReport2  = checkCollision wallRight (paddleToObject (getPaddle (getPlayer P2 gameState)))
-      leftReport2   = checkCollision wallLeft (paddleToObject (getPaddle (getPlayer P2 gameState)))
       p21           = updatePaddleCollision topReport2 (getPaddle (getPlayer P2 gameState))
       p22           = updatePaddleCollision bottomReport2 p21
-      p23           = updatePaddleCollision rightReport2 p22
-      p24           = updatePaddleCollision leftReport2 p23
-  in  (setPaddle P1 p14 . setPaddle P2 p24) gameState
+  in  (setPaddle P1 p12 . setPaddle P2 p22) gameState
 
 updatePaddleCollision :: Report -> Paddle -> Paddle
 updatePaddleCollision report paddle = case report of
