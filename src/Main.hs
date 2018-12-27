@@ -603,12 +603,20 @@ main = do
   Mix.openAudio Mix.defaultAudio 512
 
   -- Load sound effects.
-  speedSfx <- Mix.load "resources/audio/sfx/351409__newagesoup__fat-pulse-short.wav"
-  quagmireSfx <- Mix.load "resources/audio/sfx/368512__josepharaoh99__engine-dying.mp3"
+  speedSfx <- do
+    fp <- getDataFileName "resources/audio/sfx/351409__newagesoup__fat-pulse-short.wav"
+    Mix.load fp
+  quagmireSfx <- do
+    fp <- getDataFileName "resources/audio/sfx/368512__josepharaoh99__engine-dying.mp3"
+    Mix.load fp
+
 
   -- Load mainMusic as a Chunk, because trying to play a Music was causing
   -- problems where the music would abruptly end.
-  mainMusic <- Mix.load "resources/audio/purple-planet/Slipstream.ogg"
+  mainMusic <- do
+    fp <- getDataFileName "resources/audio/purple-planet/Slipstream.ogg"
+    Mix.load fp
+
   -- Play on Channel 0.
   _ <- Mix.playOn 0 Mix.Forever mainMusic
 

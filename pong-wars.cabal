@@ -16,6 +16,7 @@ data-files:          resources/images/*.bmp
                    , resources/fonts/*.otf
                    , resources/audio/purple-planet/*.ogg
                    , resources/audio/sfx/*.wav
+                   , resources/audio/sfx/*.mp3
 
 executable pong-wars
   hs-source-dirs:      src
